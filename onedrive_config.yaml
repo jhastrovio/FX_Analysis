@@ -1,0 +1,105 @@
+# OneDrive Storage Module Configuration
+# ===================================
+#
+# This configuration file works with onedrive_storage.py to provide a simple interface
+# for interacting with Microsoft OneDrive via Graph API.
+#
+# Setup Instructions:
+# ------------------
+# 1. Install required packages:
+#    pip install aiohttp msal python-dotenv pyyaml
+#
+# 2. Create a .env file with these variables:
+#    ONEDRIVE_CLIENT_ID=your_client_id
+#    ONEDRIVE_CLIENT_SECRET=your_client_secret
+#    ONEDRIVE_TENANT_ID=your_tenant_id
+#    ONEDRIVE_USER_EMAIL=your_email
+#
+# 3. Copy both onedrive_storage.py and this config file to your project
+#
+# Usage Example:
+# -------------
+# from onedrive_storage import OneDriveStorage
+# import asyncio
+#
+# async def save_data():
+#     # Initialize storage
+#     storage = OneDriveStorage(config_file='onedrive_config.yaml')
+#     
+#     # Get timestamp and format filename
+#     timestamp = storage.get_timestamp()
+#     filename = storage.format_filename('systemacro_data', timestamp=timestamp)
+#     
+#     # Get full path using configured base path
+#     path = storage.get_file_path('systemacro.base', filename)
+#     
+#     # Save data
+#     csv_data = "model_id,timestamp,value\n3995,2024-01-01,1.2345".encode('utf-8')
+#     await storage.upload_file(path, csv_data)
+#
+# asyncio.run(save_data())
+#
+# Key Features:
+# ------------
+# 1. Path Management:
+#    - Use dot notation to access nested paths (e.g., 'systemacro.hourly')
+#    - All paths are relative to OneDrive root
+#    - Folders are created automatically if they don't exist
+#
+# 2. File Naming:
+#    - Use predefined patterns with timestamps
+#    - Customize patterns in file_patterns section
+#    - Timestamp formats can be customized
+#
+# 3. Content Types:
+#    - Automatically set based on file extension
+#    - Add new types as needed
+#
+# 4. Error Handling:
+#    - Handles locked files (423 errors)
+#    - Validates credentials
+#    - Provides clear error messages
+#
+# Available Methods:
+# -----------------
+# storage.get_path('path.key')           # Get configured path
+# storage.get_file_path('path.key', 'filename')  # Combine path and filename
+# storage.format_filename('pattern_key', **kwargs)  # Format filename with pattern
+# storage.get_timestamp('format_key')    # Get formatted timestamp
+# storage.upload_file(path, data)        # Upload bytes to OneDrive
+# storage.download_file(path)            # Download bytes from OneDrive
+# storage.list_files(folder_path)        # List files in folder
+# storage.delete_file(path)              # Delete file
+
+# Base paths for different types of data
+paths:
+    base: "FX_Data/Systemacro_Data"
+    raw_data: "FX_Data/Systemacro_Data/Models"
+    processed_data: "FX_Data/Systemacro_Data/Processed"
+    logs: "FX_Data/Systemacro_Data/Logs"
+# File naming patterns
+# Use {timestamp}, {date}, {week}, {model_id}, {model_name} as placeholders
+file_patterns:
+  systemacro_data: "{model_id}_{model_name}.csv"
+  systemacro_batch: "systemacro_batch_{timestamp}.zip"
+  processed_data: "{processed_type}_{timestamp}.csv"
+
+
+# Timestamp formats for file names
+# Python datetime format codes: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
+timestamp_formats:
+  default: "%Y-%m-%d_%H-%M-%S"  # 2024-01-01_14-30-00
+  daily: "%Y-%m-%d"             # 2024-01-01
+  weekly: "%Y-W%W"              # 2024-W01
+  hour: "%Y-%m-%d_%H"           # 2024-01-01_14
+
+# Content types for different file extensions
+# Add new types as needed
+content_types:
+  csv: "text/csv"
+  json: "application/json"
+  txt: "text/plain"
+  log: "text/plain"
+  pdf: "application/pdf"
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  zip: "application/zip" 

@@ -1,1 +1,53 @@
-Placeholder
+# FX_Analysis
+
+This project focuses on analyzing daily return data from 94 FX trading models, some of which date back to the year 2000. The primary goals are to perform robust exploratory data analysis (EDA), build a consolidated master return matrix, and evaluate different portfolio construction techniques.
+
+## Objectives
+
+- Consolidate daily returns from individual model files into a master return matrix
+- Annotate models using metadata (e.g., model ID, name, category, and family)
+- Perform exploratory analysis including:
+  - Summary statistics (mean return, volatility, Sharpe ratio, etc.)
+  - Correlation analysis
+  - Drawdown and rolling performance metrics
+- Experiment with portfolio construction techniques:
+  - Equal weighting
+  - Risk parity
+  - Mean-variance optimization
+  - Hierarchical risk parity
+- Enable grouping and filtering based on model metadata (e.g., strategy category or methodology)
+
+## Structure
+
+- `Model_Index.csv`: Metadata file containing model identifiers and classifications
+- `Models/`: Raw daily return CSVs named in the format `{model_id}_{model_name}.csv`
+- `Processed/`: Directory for outputs like the consolidated return matrix
+- `Logs/`: Directory for logs and diagnostics
+- `onedrive_config.yaml`: Configuration file specifying key directory paths and file naming patterns
+- `Data_Consolidate.py`: Script for merging raw model files into the master matrix
+
+## Status
+
+Initial development complete:
+- Merging script functional and path-configurable
+- Configuration-based file management implemented
+
+Next steps:
+- Extend analysis capabilities
+- Add reporting and visualizations
+- Integrate portfolio optimization modules
+
+## Environment Setup
+
+To set up a Python virtual environment and install dependencies:
+
+```bash
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+Make sure to keep `requirements.txt` updated with any additional packages used during development.

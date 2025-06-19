@@ -1,0 +1,7 @@
+# Core libraries
+pandas>=2.0
+pyyaml>=6.0
+typer[all]>=0.9   # CLI framework
+aiohttp>=3.9
+msal>=1.24        # Microsoft Graph auth
+python-dotenv>=1.0

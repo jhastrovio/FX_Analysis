@@ -1,0 +1,95 @@
+﻿Name,ID,CATEGORY,FAMILY
+G10Carry MM1 2Crosses,1,carry,simple carry
+PPP Global,6,valuation,PPP
+LMeanReversion Global,12,valuation,moving average
+PPP G10,15,valuation,PPP
+12mRates Corr G10,21,cross asset,rate correlation
+S USDZAR long,48,static,single cross
+COT NC Follow v01,113,positioning,COT
+G3 Equity Hedge,126,capital flow,FX hedge
+TIC USRisky ALL,138,capital flow,equity flow
+CurAcct G10 OECD,176,capital flow,current account
+G10 VIX Lvl PCorr,266,cross asset,risk aversion
+G10 MOVE Lvl PCorr,270,cross asset,risk aversion
+G10 VIX Lvl PCorr 2m,297,cross asset,risk aversion
+EM 12m 3m v1,322,cross asset,rate correlation
+G7 CSMR 24d v1,404,technical,cross section mr
+EM RealRate Carry exRUB,3913,carry,real carry
+G10 RealRate Carry 3m,3914,carry,real carry
+G10Carry MM12 2Crosses,3916,carry,simple carry
+G10 Inflation Level,3917,macro,inflation level
+G10Carry MM3 2Crosses,3927,carry,simple carry
+G10 Inflation Change,3928,macro,inflation change
+G10 MM3 Chg 2Crosses,3929,cross asset,rate correlation
+G10 Equity Lvl NCorr,3930,cross asset,risk aversion
+G10 Equity Chg NCorr,3931,cross asset,risk aversion
+G10 MOVE Lvl PCorr 2y,3932,cross asset,risk aversion
+CurAcct Global OECD exRUB,3933,capital flow,current account
+TIC USRisky ALL exRUB,3934,capital flow,equity flow
+EMCarry MM3 3Cross exRUB,3935,carry,simple carry
+LMeanReversion Global exRUB,3936,valuation,moving average
+LMeanReversion G10,3937,valuation,moving average
+G10 CSMR 10d,3942,technical,cross section mr
+G10 CSMR 20d,3943,technical,cross section mr
+G10 CSMR 30d,3944,technical,cross section mr
+G10 CSMR 40d,3945,technical,cross section mr
+G10 CSMR 50d,3946,technical,cross section mr
+G10 CSMR 60d,3947,technical,cross section mr
+G10 CSMR 70d,3948,technical,cross section mr
+G10 CSMR 80d,3949,technical,cross section mr
+G10 CSMR 90d,3950,technical,cross section mr
+G10 CSMR 100d,3951,technical,cross section mr
+G10 CSMR 110d,3952,technical,cross section mr
+G10 CSMR 120d,3953,technical,cross section mr
+G10 Inflation Chg 5cross,3954,macro,inflation change
+DTS G10 1M Momentum S01,3955,technical,time series momentum
+DTS G10 1M Momentum S02,3956,technical,time series momentum
+DTS G10 1M Momentum S10,3957,technical,time series momentum
+DTS G10 MA Cross 5 20,3958,technical,time series momentum
+DTS G10 MA Cross 10 40,3959,technical,time series momentum
+DTS G10 MA Cross 20 100,3960,technical,time series momentum
+DTS G10 MA Cross 50 200,3961,technical,time series momentum
+EMCarry MM3 3Cross exRUBexTRY,3963,carry,simple carry
+PPP Global exRUB,3964,valuation,PPP
+EM 12m 3m exTRY v2,3978,cross asset,rate correlation
+G10 12m 3m v1,3979,cross asset,rate correlation
+G10 CoreCPI Level,3981,macro,inflation level
+G10 CoreCPI Change,3982,macro,inflation level
+G10 CPI headline core 2cross,3983,macro,inflation level
+G10 RealRate Carry 3m Core,3984,carry,real carry
+CurAcct Global OECD exRUBexTRY,3985,capital flow,current account
+G10 12m 3m v2,3986,cross asset,rate correlation
+DTS G3plusCNH Momentum 50 120,3987,technical,time series momentum
+DTS ScandiANZ MR 120 40,3988,technical,time series mr
+DTS GBPHUF MR 100 33,3989,technical,time series mr
+DTS USDTWD Momentum 3 33,3990,technical,time series momentum
+DTS USDCNH Momentum 15 30,3991,technical,time series momentum
+DTS USDCNH Momentum 20 80,3992,technical,time series momentum
+DTS CNHKRW Momentum 5 40,3993,technical,time series momentum
+DTS CNHBRL Momentum 10 35,3994,technical,time series momentum
+DTS USDTRY Momentum 5 30,3995,technical,time series momentum
+LMeanReversion Global exRUBTRY,3999,valuation,moving average
+LMeanReversion Global exRUBTRYMYR,4000,valuation,moving average
+EMCarry MM3 3Cross exRUBTRYMYR,4001,carry,simple carry
+G10 IP yoy,4002,macro,IP growth
+G10 US10Y Lvl NCorr 3y,4003,cross asset,risk aversion
+TIC USRisky ALL Liquid,4005,capital flow,equity flow
+LMeanReversion Global Liquid,4006,valuation,moving average
+EMCarry MM3 3Cross liquid,4007,carry,simple carry
+G10 CSMR 15d,4008,technical,cross section mr
+G10 CSMR 25d,4009,technical,cross section mr
+COMP G3 Equity Bond Hedge,4014,capital flow,FX hedge
+COMP LT MR Doublesort 2-5 Slope,4015,valuation,moving average
+PPP Global Liquid,4016,valuation,PPP
+S CHFNOK long,4019,static,single cross
+COT NC Reversal v01,4020,positioning,COT
+TFF AsseMgr Reversal v02,4021,positioning,COT
+TFF AsseMgr Reversal v03,4022,positioning,COT
+COMP LT MR Doublesort 2-5 Slope exTRY,4023,valuation,moving average
+GlobalCarry MM12 v1,4024,carry,simple carry
+GlobalCarry MM12 v2,4025,carry,simple carry
+ZEW USD v1,4027,positioning,ZEW
+DTS USDCNH TR Momentum 5 35,4028,technical,time series momentum
+DTS TWDCNHUSD TR Momentum 15 50,4029,technical,time series momentum
+DTS Europe TR Momentum 130 260,4030,technical,time series momentum
+CurAcct G10 exNOK,4031,capital flow,current account
