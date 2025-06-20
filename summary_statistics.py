@@ -44,21 +44,35 @@ class FXPerformanceCalculator:
         self.annualization_factor = config.get_annualization_factor()
     
     def cumulative_to_daily_returns(self, cumulative_returns: pd.Series) -> pd.Series:
-        """Convert cumulative percentage returns to daily returns.
+        """
+        Convert cumulative return percentages to daily returns in decimal.
+        Assumes input is cumulative return in % terms.
+        """
+        return cumulative_returns.diff() / 100
+    
+    def annualized_return(self, cumulative_returns: pd.Series) -> float:
+        """Calculate annualized return as a percentage from cumulative returns.
         
         Args:
-            cumulative_returns: Cumulative returns as percentages (e.g., 105.2 means 5.2% total return)
+            cumulative_returns: Cumulative returns as percentages
             
         Returns:
-            pd.Series: Daily returns in decimal format
+            float: Annualized return as a percentage
         """
-        # Convert percentage to decimal (e.g., 105.2 -> 1.052)
-        cumulative_decimal = cumulative_returns / 100
+        daily_returns = self.cumulative_to_daily_returns(cumulative_returns)
+        clean_returns = daily_returns.dropna()
+        if len(clean_returns) == 0:
+            return np.nan
         
-        # Calculate daily returns from cumulative
-        daily_returns = cumulative_decimal.pct_change()
+        # Calculate cumulative return
+        cumulative_return = (1 + clean_returns).prod()
         
-        return daily_returns
+        # Annualize using the annualization factor
+        n_days = len(clean_returns)
+        annualized_return = cumulative_return**(self.annualization_factor / n_days) - 1
+        
+        # Convert to percentage
+        return annualized_return * 100
     
     def mean_return(self, cumulative_returns: pd.Series) -> float:
         """Calculate mean daily return from cumulative returns.
@@ -90,12 +104,13 @@ class FXPerformanceCalculator:
     
     def sharpe_ratio(self, cumulative_returns: pd.Series) -> float:
         """Calculate Sharpe ratio based on calendar monthly returns from cumulative returns.
+        Returns annualized Sharpe ratio (monthly Sharpe / sqrt(12)).
         
         Args:
             cumulative_returns: Cumulative returns as percentages
             
         Returns:
-            float: Monthly Sharpe ratio
+            float: Annualized Sharpe ratio
         """
         daily_returns = self.cumulative_to_daily_returns(cumulative_returns)
         clean_returns = daily_returns.dropna()
@@ -113,7 +128,12 @@ class FXPerformanceCalculator:
             return np.nan
         
         # Monthly Sharpe ratio
-        return monthly_returns.mean() / monthly_returns.std()
+        monthly_sharpe = monthly_returns.mean() / monthly_returns.std()
+        
+        # Convert to annualized Sharpe ratio
+        annualized_sharpe = monthly_sharpe * np.sqrt(12)
+        
+        return annualized_sharpe
     
     def max_drawdown(self, cumulative_returns: pd.Series) -> float:
         """Calculate maximum drawdown from cumulative returns.
@@ -204,8 +224,8 @@ def calculate_summary_statistics(master_matrix: pd.DataFrame, model_index: pd.Da
         
         # Add each performance metric from config
         for metric in performance_metrics:
-            if metric == 'mean_return':
-                metrics[metric] = calculator.mean_return(cumulative_returns)
+            if metric == 'annualized_return':
+                metrics[metric] = calculator.annualized_return(cumulative_returns)
             elif metric == 'volatility':
                 metrics[metric] = calculator.volatility(cumulative_returns)
             elif metric == 'sharpe_ratio':

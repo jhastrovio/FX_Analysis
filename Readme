@@ -7,7 +7,7 @@ This project focuses on analyzing daily return data from 94 FX trading models, s
 - Consolidate daily returns from individual model files into a master return matrix
 - Annotate models using metadata (e.g., model ID, name, category, and family)
 - Perform exploratory analysis including:
-  - Summary statistics (mean return, volatility, Sharpe ratio, etc.)
+  - Summary statistics (annualized return, volatility, Sharpe ratio, max drawdown)
   - Correlation analysis
   - Drawdown and rolling performance metrics
 - Experiment with portfolio construction techniques:
@@ -17,25 +17,47 @@ This project focuses on analyzing daily return data from 94 FX trading models, s
   - Hierarchical risk parity
 - Enable grouping and filtering based on model metadata (e.g., strategy category or methodology)
 
+## Enhanced Configuration System
+
+The project now uses a comprehensive configuration-driven approach with `fx_analysis_config.yaml`:
+
+### Key Features
+- **Centralized Configuration**: All file types, naming patterns, storage locations, and analysis parameters defined in one place
+- **Enhanced Naming Convention**: Output files include date ranges and timestamps (e.g., `Summary_Statistics_full_period_20250620_161350.csv`)
+- **Test Environment Support**: Separate test data configuration for development and testing
+- **Config-Driven Analysis**: Performance metrics, annualization factors, and analysis parameters all configurable
+- **OneDrive Integration**: Complete cloud storage integration with configurable paths
+
+### Configuration Structure
+- **File Types**: Raw, processed, and test data file definitions with patterns and locations
+- **Storage Paths**: OneDrive directory structure for different data types
+- **Analysis Parameters**: Annualization factors, performance metrics, rolling windows, correlation settings
+- **Model Classification**: Categories and families for model grouping
+- **Output Formats**: CSV, Excel, and JSON export configurations
+
 ## Structure
 
-- `Model_Index.csv`: Metadata file containing model identifiers and classifications
-- `Models/`: Raw daily return CSVs named in the format `{model_id}_{model_name}.csv`
-- `Processed/`: Directory for outputs like the consolidated return matrix
-- `Logs/`: Directory for logs and diagnostics
-- `onedrive_config.yaml`: Configuration file specifying key directory paths and file naming patterns
-- `Data_Consolidate.py`: Script for merging raw model files into the master matrix
+- `fx_analysis_config.yaml`: Comprehensive configuration file defining all project parameters
+- `config_manager.py`: Python module for accessing and managing configuration settings
+- `Model_Index.csv`: Metadata file containing model identifiers and classifications (stored in OneDrive)
+- `Models/`: Raw daily return CSVs named in the format `{model_id}_{model_name}.csv` (stored in OneDrive)
+- `Processed/`: Directory in OneDrive for outputs like the consolidated return matrix
+- `Test/`: Directory in OneDrive for test data and development
+- `Logs/`: Directory in OneDrive for logs and diagnostics
+- `onedrive_config.yaml`: OneDrive authentication and API configuration
+- `Data_Consolidate.py`: Script for merging raw model files into the master matrix using OneDrive Graph API
+- `summary_statistics.py`: Script for calculating performance metrics with config-driven approach
+- `onedrive_storage.py`: Module that interfaces with Microsoft Graph API to access and transfer files directly from OneDrive
 
 ## Status
 
-Initial development complete:
-- Merging script functional and path-configurable
-- Configuration-based file management implemented
-
-Next steps:
-- Extend analysis capabilities
-- Add reporting and visualizations
-- Integrate portfolio optimization modules
+Enhanced development complete:
+- ✅ Configuration-driven file management implemented
+- ✅ Enhanced naming convention with timestamps and date ranges
+- ✅ Test environment support with `--test` flag
+- ✅ Summary statistics with annualized metrics
+- ✅ OneDrive cloud access integrated via Microsoft Graph API
+- ✅ Configurable performance metrics and analysis parameters
 
 ## Environment Setup
 
@@ -50,4 +72,15 @@ source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Make sure to keep `requirements.txt` updated with any additional packages used during development.
+### OneDrive Graph API Setup
+
+Ensure you have a `.env` file in your project root with the following variables:
+
+```
+ONEDRIVE_CLIENT_ID=your_client_id
+ONEDRIVE_CLIENT_SECRET=your_client_secret
+ONEDRIVE_TENANT_ID=your_tenant_id
+ONEDRIVE_USER_EMAIL=your_user_email
+```
+
+These credentials are used to authenticate with Microsoft Graph and access files stored in OneDrive.

@@ -130,7 +130,7 @@ analysis:
   
   # Performance metrics
   performance_metrics:
-    - "mean_return"
+    - "annualized_return"
     - "volatility"
     - "sharpe_ratio"
     - "max_drawdown"
