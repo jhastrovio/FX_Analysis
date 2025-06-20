@@ -1,0 +1,229 @@
+# FX Analysis Project Configuration
+# =================================
+# This configuration file defines all file types, naming patterns, storage locations,
+# and analysis parameters for the FX analysis project.
+# 
+# NOTE: This is a OneDrive-only implementation - all data is stored in the cloud.
+
+# Project Information
+project:
+  name: "FX_Analysis"
+  version: "1.0.0"
+  description: "FX trading model analysis and portfolio construction"
+  storage_type: "onedrive"
+
+# OneDrive Storage Configuration
+storage:
+  onedrive:
+    base_path: "FX_Data/Systemacro_Data"
+    raw_data: "FX_Data/Systemacro_Data/Models"
+    processed_data: "FX_Data/Systemacro_Data/Processed"
+    logs: "FX_Data/Systemacro_Data/Logs"
+    reports: "FX_Data/Systemacro_Data/Reports"
+    analysis: "FX_Data/Systemacro_Data/Analysis"
+    test: "FX_Data/Systemacro_Data/Test"
+
+# File Type Definitions
+file_types:
+  # Raw data files (stored in OneDrive)
+  raw:
+    model_returns:
+      pattern: "{model_id}_{model_name}.csv"
+      description: "Individual model daily return files"
+      location: "onedrive.raw_data"
+      columns:
+        date: ["Date", "date", "DATE"]
+        returns: ["ID:*", "Returns", "returns"]
+        exclude: ["(ex carry)"]
+    
+    model_index:
+      pattern: "Model_Index.csv"
+      description: "Model metadata and classification file"
+      location: "onedrive.raw_data"
+      columns:
+        id: "ID"
+        name: "Name"
+        category: "CATEGORY"
+        family: "FAMILY"
+  
+  # Processed data files (stored in OneDrive)
+  processed:
+    master_matrix:
+      pattern: "Master_Return_Matrix.csv"
+      description: "Consolidated daily returns for all models"
+      location: "onedrive.processed_data"
+      columns:
+        date: "Date"
+        returns: "* - *"  # Pattern for model columns
+    
+    summary_stats:
+      pattern: "Summary_Statistics_{date_range}_{timestamp}.csv"
+      description: "Summary statistics for each model"
+      location: "onedrive.processed_data"
+    
+    correlation_matrix:
+      pattern: "Correlation_Matrix_{date_range}_{timestamp}.csv"
+      description: "Correlation matrix between all models"
+      location: "onedrive.processed_data"
+    
+    rolling_metrics:
+      pattern: "Rolling_Metrics_{date_range}_{window}_{timestamp}.csv"
+      description: "Rolling performance metrics over time"
+      location: "onedrive.processed_data"
+    
+    portfolio_weights:
+      pattern: "Portfolio_Weights_{strategy}_{date_range}_{timestamp}.csv"
+      description: "Portfolio weights for different strategies"
+      location: "onedrive.processed_data"
+    
+    performance_analysis:
+      pattern: "Performance_Analysis_{analysis_type}_{date_range}_{timestamp}.csv"
+      description: "Performance analysis results"
+      location: "onedrive.analysis"
+
+  # Test data files (stored in OneDrive test folder)
+  test:
+    model_returns:
+      pattern: "test_{model_id}_{model_name}.csv"
+      description: "Test individual model daily return files"
+      location: "onedrive.test"
+      columns:
+        date: ["Date", "date", "DATE"]
+        returns: ["ID:*", "Returns", "returns"]
+        exclude: ["(ex carry)"]
+    
+    model_index:
+      pattern: "Test_Model_Index.csv"
+      description: "Test model metadata and classification file"
+      location: "onedrive.test"
+      columns:
+        id: "ID"
+        name: "Name"
+        category: "CATEGORY"
+        family: "FAMILY"
+    
+    master_matrix:
+      pattern: "Test_Master_Return_Matrix.csv"
+      description: "Test consolidated daily returns for all models"
+      location: "onedrive.test"
+      columns:
+        date: "Date"
+        returns: "* - *"  # Pattern for model columns
+    
+    summary_stats:
+      pattern: "Test_Summary_Statistics_{date_range}_{timestamp}.csv"
+      description: "Test summary statistics for each model"
+      location: "onedrive.test"
+
+# Analysis Configuration
+analysis:
+  # Annualization factor for converting daily metrics to annual
+  annualization_factor: 260  # Trading days per year
+  
+  # Date ranges
+  date_ranges:
+    full_period: "2000-01-01 to present"
+    recent_10y: "10 years"
+    recent_5y: "5 years"
+    recent_2y: "2 years"
+    recent_1y: "1 year"
+  
+  # Performance metrics
+  performance_metrics:
+    - "mean_return"
+    - "volatility"
+    - "sharpe_ratio"
+    - "max_drawdown"
+ 
+  
+  # Rolling windows
+  rolling_windows:
+    - 30    # 1 month
+    - 60    # 2 months
+    - 90    # 3 months
+    - 180   # 6 months
+    - 260   # 1 year
+    - 520   # 2 years
+  
+  # Correlation analysis
+  correlation:
+    min_correlation: 0.7
+    max_correlation: 0.95
+    correlation_method: "pearson"
+
+# Portfolio Construction
+portfolio:
+  # Equal weighting
+  equal_weight:
+    rebalance_frequency: "monthly"
+    min_models: 10
+    max_models: 94
+ 
+
+# Model Categories and Families
+model_classification:
+  categories:
+    - "carry"
+    - "valuation"
+    - "cross asset"
+    - "static"
+    - "positioning"
+    - "capital flow"
+    - "technical"
+    - "macro"
+  
+  families:
+    - "simple carry"
+    - "real carry"
+    - "PPP"
+    - "moving average"
+    - "rate correlation"
+    - "risk aversion"
+    - "single cross"
+    - "COT"
+    - "FX hedge"
+    - "equity flow"
+    - "current account"
+    - "cross section mr"
+    - "inflation level"
+    - "inflation change"
+    - "time series momentum"
+    - "time series mr"
+    - "IP growth"
+
+# Logging Configuration (logs stored in OneDrive)
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_pattern: "fx_analysis_{timestamp}.log"
+  location: "onedrive.logs"
+  max_files: 10
+  max_size: "10MB"
+
+# Output Formats
+output_formats:
+  csv:
+    encoding: "utf-8"
+    date_format: "%Y-%m-%d"
+    float_format: "%.6f"
+  
+  excel:
+    sheet_name: "FX_Analysis"
+    engine: "openpyxl"
+  
+  json:
+    indent: 2
+    date_format: "iso"
+
+# Validation Rules
+validation:
+  data_quality:
+    min_date: "2000-01-01"
+    max_missing_pct: 0.05    # Max 5% missing data
+    min_models: 50           # Minimum models required
+    max_volatility: 0.50     # Max 50% daily volatility (sanity check)
+  
+  model_metadata:
+    required_fields: ["ID", "Name", "CATEGORY", "FAMILY"]
+    id_format: "integer"
+    name_format: "string" 

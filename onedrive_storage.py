@@ -4,22 +4,21 @@ Supports reading, writing, listing, and deleting files.
 """
 
 import os
-import json
 import asyncio
-from pathlib import Path
-from typing import List, Dict, Optional
+import io
+from typing import List, Dict
 from datetime import datetime
 
 import aiohttp
 import msal
 import yaml
+import pandas as pd
 from dotenv import load_dotenv
 
 from pathlib import PurePosixPath
 
 # Constants
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0/users/{user_email}/drive/root:/{path}:/content"
-TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 DEVICE_CACHE_PATH = os.path.expanduser("~/.onedrive_msal_cache.bin")
 
 class OneDriveStorage:
@@ -242,6 +241,31 @@ class OneDriveStorage:
             headers = {"Authorization": f"Bearer {token}"}
             async with session.delete(url, headers=headers) as resp:
                 resp.raise_for_status()
+
+    async def upload_csv(self, path: str, df: pd.DataFrame) -> None:
+        """Upload a pandas DataFrame as a CSV file to OneDrive.
+        
+        Args:
+            path: Target file path relative to OneDrive root
+            df: DataFrame to upload
+        """
+        with io.StringIO() as buffer:
+            df.to_csv(buffer, index=False)
+            data = buffer.getvalue().encode("utf-8")
+        await self.upload_file(path, data)
+
+    async def download_csv(self, path: str) -> pd.DataFrame:
+        """Download a CSV file from OneDrive and return as a pandas DataFrame.
+        
+        Args:
+            path: File path relative to OneDrive root
+            
+        Returns:
+            pd.DataFrame: The CSV data as a DataFrame
+        """
+        data = await self.download_file(path)
+        with io.StringIO(data.decode('utf-8')) as buffer:
+            return pd.read_csv(buffer)
 
 # Example usage:
 """
