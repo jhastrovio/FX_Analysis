@@ -39,6 +39,7 @@ The project now uses a comprehensive configuration-driven approach with `fx_anal
 
 - `fx_analysis_config.yaml`: Comprehensive configuration file defining all project parameters
 - `config_manager.py`: Python module for accessing and managing configuration settings
+- `file_manager.py`: OneDrive file management interface with CLI commands for listing, exploring, and managing files
 - `Model_Index.csv`: Metadata file containing model identifiers and classifications (stored in OneDrive)
 - `Models/`: Raw daily return CSVs named in the format `{model_id}_{model_name}.csv` (stored in OneDrive)
 - `Processed/`: Directory in OneDrive for outputs like the consolidated return matrix
@@ -58,6 +59,7 @@ Enhanced development complete:
 - ✅ Summary statistics with annualized metrics
 - ✅ OneDrive cloud access integrated via Microsoft Graph API
 - ✅ Configurable performance metrics and analysis parameters
+- ✅ OneDrive file management CLI with folder exploration and statistics
 
 ## Environment Setup
 

@@ -30,6 +30,9 @@ app = typer.Typer(add_completion=False, invoke_without_command=True, help="FX mo
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
 
+# Set pandas display options for consistent float formatting
+pd.set_option('display.float_format', '{:.6f}'.format)
+
 class FXPerformanceCalculator:
     """Calculate basic performance metrics for FX trading models."""
     
@@ -290,12 +293,29 @@ def main(
         "-t",
         help="Use test data instead of production data",
     ),
+    date_range: str = typer.Option(
+        None,
+        "--date-range",
+        "-d",
+        help="Date range for analysis (full_period, recent_10y, recent_5y, recent_2y, recent_1y)",
+    ),
 ) -> None:
     """Calculate summary statistics for all FX models."""
     # Load configuration
     config = get_config(str(config_file))
     
+    # Validate date range if provided
+    if date_range:
+        available_ranges = config.get_date_ranges()
+        if date_range not in available_ranges:
+            typer.echo(f"Error: Invalid date range '{date_range}'", err=True)
+            typer.echo(f"Available ranges: {', '.join(available_ranges.keys())}", err=True)
+            raise typer.Exit(code=1)
+    else:
+        date_range = config.get_default_date_range()
+    
     if verbose:
+        typer.echo(f"Using date range: {date_range}")
         typer.echo("Loading master return matrix and model index...")
     
     # Initialize OneDrive storage (uses onedrive_config.yaml by default)
@@ -317,6 +337,7 @@ def main(
     
     if preview:
         typer.echo("\n=== SUMMARY STATISTICS PREVIEW ===")
+        typer.echo(f"Date Range: {date_range}")
         typer.echo(summary_df.head(10))
         typer.echo(f"\nShape: {summary_df.shape}")
         
@@ -330,7 +351,6 @@ def main(
         
     else:
         # Save to OneDrive with enhanced naming
-        date_range = config.get_default_date_range()
         analysis_type = config.get_analysis_type('summary_statistics')
         
         # Use test file type if test flag is set
@@ -339,6 +359,11 @@ def main(
                                                date_range=date_range)
         
         try:
+            # Format float columns to 6 decimal places before uploading
+            float_columns = summary_df.select_dtypes(include=[np.number]).columns
+            for col in float_columns:
+                summary_df[col] = summary_df[col].round(6)
+            
             asyncio.run(storage.upload_csv(output_path, summary_df))
             data_type = "test" if test else "production"
             typer.echo(f"Summary statistics uploaded to OneDrive ({data_type}): {output_path}")
@@ -348,6 +373,140 @@ def main(
         except Exception as e:
             typer.echo(f"Failed to upload summary statistics: {e}", err=True)
             raise typer.Exit(code=1)
+
+
+@app.command()
+def all_ranges(
+    config_file: Path = typer.Option(
+        "fx_analysis_config.yaml",
+        "--config",
+        "-c",
+        exists=True,
+        readable=True,
+        help="Path to YAML config file",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose/--no-verbose",
+        "-v",
+        help="Enable verbose logging",
+    ),
+    test: bool = typer.Option(
+        False,
+        "--test/--no-test",
+        "-t",
+        help="Use test data instead of production data",
+    ),
+) -> None:
+    """Calculate summary statistics for all available date ranges."""
+    # Load configuration
+    config = get_config(str(config_file))
+    
+    # Get all available date ranges
+    available_ranges = config.get_date_ranges()
+    
+    if verbose:
+        typer.echo(f"Running summary statistics for all {len(available_ranges)} date ranges:")
+        for range_name, range_desc in available_ranges.items():
+            typer.echo(f"  - {range_name}: {range_desc}")
+        typer.echo()
+    
+    # Initialize OneDrive storage
+    storage = OneDriveStorage()
+    
+    # Load data once (will be filtered for each date range)
+    try:
+        master_matrix, model_index = load_master_matrix(storage, config, test)
+        if verbose:
+            typer.echo(f"Loaded master matrix with shape: {master_matrix.shape}")
+            typer.echo(f"Loaded model index with {len(model_index)} models")
+    except Exception as e:
+        typer.echo(f"Failed to load data: {e}", err=True)
+        raise typer.Exit(code=1)
+    
+    # Process each date range
+    results_summary = []
+    
+    for range_name, range_desc in available_ranges.items():
+        if verbose:
+            typer.echo(f"\n=== Processing {range_name}: {range_desc} ===")
+        
+        try:
+            # Filter data based on date range
+            filtered_matrix = filter_data_by_date_range(master_matrix, range_name, range_desc)
+            
+            if filtered_matrix.empty:
+                typer.echo(f"⚠️  No data available for {range_name}, skipping...")
+                continue
+            
+            if verbose:
+                typer.echo(f"Filtered data shape: {filtered_matrix.shape}")
+            
+            # Calculate summary statistics for this date range
+            summary_df = calculate_summary_statistics(filtered_matrix, model_index, config, verbose)
+            
+            # Format float columns to 6 decimal places
+            float_columns = summary_df.select_dtypes(include=[np.number]).columns
+            for col in float_columns:
+                summary_df[col] = summary_df[col].round(6)
+            
+            # Save to OneDrive
+            analysis_type = config.get_analysis_type('summary_statistics')
+            output_file_type = 'test' if test else 'processed'
+            output_path = config.get_full_file_path(output_file_type, analysis_type, 
+                                                   date_range=range_name)
+            
+            asyncio.run(storage.upload_csv(output_path, summary_df))
+            
+            # Store summary info
+            results_summary.append({
+                'date_range': range_name,
+                'description': range_desc,
+                'shape': summary_df.shape,
+                'output_path': output_path
+            })
+            
+            data_type = "test" if test else "production"
+            typer.echo(f"✅ {range_name}: Uploaded to OneDrive ({data_type})")
+            typer.echo(f"   Shape: {summary_df.shape}")
+            typer.echo(f"   Path: {output_path}")
+            
+        except Exception as e:
+            typer.echo(f"❌ Error processing {range_name}: {e}", err=True)
+            continue
+    
+    # Print final summary
+    typer.echo(f"\n=== SUMMARY ===")
+    typer.echo(f"Successfully processed {len(results_summary)} out of {len(available_ranges)} date ranges")
+    
+    for result in results_summary:
+        typer.echo(f"✅ {result['date_range']}: {result['description']} - {result['shape']}")
+
+
+def filter_data_by_date_range(master_matrix: pd.DataFrame, range_name: str, range_desc: str) -> pd.DataFrame:
+    """Filter master matrix data based on date range specification."""
+    if range_name == 'full_period':
+        return master_matrix
+    
+    # Parse the range description to get the number of years
+    if 'years' in range_desc.lower():
+        try:
+            years = int(range_desc.split()[0])
+        except (ValueError, IndexError):
+            # Fallback to full period if parsing fails
+            return master_matrix
+    else:
+        # For other formats, return full period
+        return master_matrix
+    
+    # Calculate the start date (years ago from the latest date)
+    latest_date = master_matrix.index.max()
+    start_date = latest_date - pd.DateOffset(years=years)
+    
+    # Filter the data
+    filtered_data = master_matrix[master_matrix.index >= start_date]
+    
+    return filtered_data
 
 
 if __name__ == "__main__":
