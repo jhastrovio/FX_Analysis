@@ -311,6 +311,17 @@ async def preview_file(storage: OneDriveStorage, path_key: str, filename: str, n
         return pd.DataFrame()
 
 
+async def load_full_file(storage: OneDriveStorage, path_key: str, filename: str) -> pd.DataFrame:
+    """Load the complete file from OneDrive."""
+    try:
+        file_path = storage.get_file_path(path_key, filename)
+        df = await storage.download_csv(file_path)
+        return df
+    except Exception as e:
+        typer.echo(f"❌ Failed to read {filename}: {e}")
+        return pd.DataFrame()
+
+
 async def delete_file(storage: OneDriveStorage, path_key: str, filename: str, confirm: bool = True) -> bool:
     """Delete a file from OneDrive with optional confirmation."""
     if confirm:
@@ -470,6 +481,29 @@ def preview_onedrive_file(
             typer.echo(df.to_string(index=False))
     
     asyncio.run(_preview_file())
+
+
+@app.command()
+def load_onedrive_file(
+    path_key: str = typer.Argument(..., help="Path key from config"),
+    filename: str = typer.Argument(..., help="Name of file to load"),
+    output_file: str = typer.Option(None, help="Save to local CSV file")
+):
+    """Load the complete OneDrive CSV file."""
+    async def _load_file():
+        storage = OneDriveStorage()
+        df = await load_full_file(storage, path_key, filename)
+        if not df.empty:
+            typer.echo(f"✅ Loaded: {filename} (rows: {len(df)}, columns: {len(df.columns)})")
+            if output_file:
+                df.to_csv(output_file, index=False)
+                typer.echo(f"📄 Saved to: {output_file}")
+            else:
+                typer.echo(df.to_string(index=False))
+        else:
+            typer.echo(f"❌ Failed to load {filename}")
+    
+    asyncio.run(_load_file())
 
 
 @app.command()
