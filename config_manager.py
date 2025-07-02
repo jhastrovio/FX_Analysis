@@ -138,6 +138,11 @@ class FXAnalysisConfig:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             pattern = pattern.replace('{timestamp}', timestamp)
         
+        if '{date}' in pattern:
+            from datetime import datetime
+            date = datetime.now().strftime("%Y%m%d")
+            pattern = pattern.replace('{date}', date)
+        
         # Replace other placeholders from kwargs
         for key, value in kwargs.items():
             placeholder = f'{{{key}}}'
@@ -184,7 +189,7 @@ class FXAnalysisConfig:
     
     def get_default_date_range(self) -> str:
         """Get the default date range for analysis."""
-        return 'full_period'  # Default to full period
+        return 'full'  # Default to full period
     
     def get_analysis_type(self, script_name: str) -> str:
         """Get analysis type based on script name."""

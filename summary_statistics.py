@@ -162,6 +162,26 @@ class FXPerformanceCalculator:
         drawdown = (cumulative_returns_decimal - running_max) / running_max
         
         return drawdown.min()
+    
+    def total_return(self, cumulative_returns: pd.Series) -> float:
+        """Calculate total cumulative return over the entire period.
+        
+        Args:
+            cumulative_returns: Cumulative returns as percentages
+            
+        Returns:
+            float: Total cumulative return as a percentage
+        """
+        daily_returns = self.cumulative_to_daily_returns(cumulative_returns)
+        clean_returns = daily_returns.dropna()
+        if len(clean_returns) == 0:
+            return np.nan
+        
+        # Calculate total cumulative return
+        total_return = (1 + clean_returns).prod() - 1
+        
+        # Convert to percentage
+        return total_return * 100
 
 
 def load_master_matrix(storage: OneDriveStorage, config, test: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -229,6 +249,8 @@ def calculate_summary_statistics(master_matrix: pd.DataFrame, model_index: pd.Da
         for metric in performance_metrics:
             if metric == 'annualized_return':
                 metrics[metric] = calculator.annualized_return(cumulative_returns)
+            elif metric == 'return':
+                metrics[metric] = calculator.total_return(cumulative_returns)
             elif metric == 'volatility':
                 metrics[metric] = calculator.volatility(cumulative_returns)
             elif metric == 'sharpe_ratio':
@@ -297,7 +319,7 @@ def main(
         None,
         "--date-range",
         "-d",
-        help="Date range for analysis (full_period, recent_10y, recent_5y, recent_2y, recent_1y)",
+        help="Date range for analysis (full, 10y, 5year, 2year, 1year, 6month, 3month, 2month, 1month, 1week, 3day, 1day)",
     ),
 ) -> None:
     """Calculate summary statistics for all FX models."""
@@ -485,28 +507,45 @@ def all_ranges(
 
 def filter_data_by_date_range(master_matrix: pd.DataFrame, range_name: str, range_desc: str) -> pd.DataFrame:
     """Filter master matrix data based on date range specification."""
-    if range_name == 'full_period':
+    if range_name == 'full':
         return master_matrix
     
-    # Parse the range description to get the number of years
-    if 'years' in range_desc.lower():
-        try:
+    # Parse the range description to get the time period
+    range_desc_lower = range_desc.lower()
+    
+    try:
+        if 'year' in range_desc_lower:  # handles both "year" and "years"
+            # Extract number of years
             years = int(range_desc.split()[0])
-        except (ValueError, IndexError):
-            # Fallback to full period if parsing fails
+            latest_date = master_matrix.index.max()
+            start_date = latest_date - pd.DateOffset(years=years)
+        elif 'month' in range_desc_lower:  # handles both "month" and "months"
+            # Extract number of months
+            months = int(range_desc.split()[0])
+            latest_date = master_matrix.index.max()
+            start_date = latest_date - pd.DateOffset(months=months)
+        elif 'week' in range_desc_lower:  # handles both "week" and "weeks"
+            # Extract number of weeks
+            weeks = int(range_desc.split()[0])
+            latest_date = master_matrix.index.max()
+            start_date = latest_date - pd.DateOffset(weeks=weeks)
+        elif 'day' in range_desc_lower:  # handles both "day" and "days"
+            # Extract number of days and use business days for financial data
+            days = int(range_desc.split()[0])
+            latest_date = master_matrix.index.max()
+            from pandas.tseries.offsets import BDay
+            start_date = latest_date - BDay(days)
+        else:
+            # For other formats, return full period
             return master_matrix
-    else:
-        # For other formats, return full period
+        
+        # Filter the data
+        filtered_data = master_matrix[master_matrix.index >= start_date]
+        return filtered_data
+        
+    except (ValueError, IndexError):
+        # Fallback to full period if parsing fails
         return master_matrix
-    
-    # Calculate the start date (years ago from the latest date)
-    latest_date = master_matrix.index.max()
-    start_date = latest_date - pd.DateOffset(years=years)
-    
-    # Filter the data
-    filtered_data = master_matrix[master_matrix.index >= start_date]
-    
-    return filtered_data
 
 
 if __name__ == "__main__":

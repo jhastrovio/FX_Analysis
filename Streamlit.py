@@ -116,7 +116,7 @@ if selected_files and storage:
                 st.sidebar.subheader("🏆 Top Performers Filter")
                 
                 # Find available metric columns for top N filtering
-                metric_cols = ['annualized_return', 'volatility', 'sharpe_ratio', 'max_drawdown']
+                metric_cols = ['annualized_return', 'return', 'volatility', 'sharpe_ratio', 'max_drawdown']
                 available_metrics = [col for col in metric_cols if col in combined_df.columns]
                 
                 if available_metrics:
@@ -181,7 +181,7 @@ if selected_files and storage:
                 st.subheader("📊 Metric Visualizations")
                 
                 # Find available metric columns
-                metric_cols = ['annualized_return', 'volatility', 'sharpe_ratio', 'max_drawdown']
+                metric_cols = ['annualized_return', 'return', 'volatility', 'sharpe_ratio', 'max_drawdown']
                 available_metrics = [col for col in metric_cols if col in df_filtered.columns]
                 
                 if available_metrics:
@@ -207,6 +207,61 @@ if selected_files and storage:
                             pivot_df = df_for_heatmap.pivot(index='model_name', columns='period_abbreviated', values=metric_to_plot)
                             
                             if not pivot_df.empty:
+                                # Heatmap customization options
+                                st.subheader("🎛️ Heatmap Customization")
+                                
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.write("**Column Ordering:**")
+                                    periods = list(pivot_df.columns)
+                                    if st.checkbox("Customize column order"):
+                                        reordered_periods = st.multiselect(
+                                            "Select column order",
+                                            periods,
+                                            default=periods,
+                                            key="column_order"
+                                        )
+                                        if reordered_periods:
+                                            pivot_df = pivot_df[reordered_periods]
+                                
+                                with col2:
+                                    st.write("**Row Ordering:**")
+                                    models = list(pivot_df.index)
+                                    if st.checkbox("Customize row order"):
+                                        reordered_models = st.multiselect(
+                                            "Select row order",
+                                            models,
+                                            default=models,
+                                            key="row_order"
+                                        )
+                                        if reordered_models:
+                                            pivot_df = pivot_df.loc[reordered_models]
+                                
+                                # Quick sorting buttons
+                                st.write("**Quick Sorting:**")
+                                sort_col1, sort_col2, sort_col3 = st.columns(3)
+                                
+                                with sort_col1:
+                                    if st.button("Sort by Best Overall"):
+                                        avg_performance = pivot_df.mean(axis=1)
+                                        ascending_order = metric_to_plot in ['volatility', 'max_drawdown']
+                                        sorted_models = avg_performance.sort_values(ascending=ascending_order).index.tolist()
+                                        pivot_df = pivot_df.loc[sorted_models]
+                                
+                                with sort_col2:
+                                    if st.button("Sort by Latest Period"):
+                                        latest_period = pivot_df.columns[-1]
+                                        ascending_order = metric_to_plot in ['volatility', 'max_drawdown']
+                                        sorted_models = pivot_df[latest_period].sort_values(ascending=ascending_order).index.tolist()
+                                        pivot_df = pivot_df.loc[sorted_models]
+                                
+                                with sort_col3:
+                                    if st.button("Sort by Consistency"):
+                                        consistency = pivot_df.std(axis=1)
+                                        sorted_models = consistency.sort_values(ascending=True).index.tolist()
+                                        pivot_df = pivot_df.loc[sorted_models]
+                                
                                 # Calculate figure size based on data
                                 fig_width = max(12, len(pivot_df.columns) * 2)
                                 fig_height = max(8, len(pivot_df) * 0.4)
@@ -249,6 +304,18 @@ if selected_files and storage:
                                     file_name=f"heatmap_{metric_to_plot}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                                     mime="text/csv"
                                 )
+                                
+                                # Show summary statistics
+                                st.subheader("📊 Heatmap Summary")
+                                col1, col2, col3 = st.columns(3)
+                                
+                                with col1:
+                                    st.metric("Best Average", f"{pivot_df.mean(axis=1).max():.3f}")
+                                with col2:
+                                    st.metric("Worst Average", f"{pivot_df.mean(axis=1).min():.3f}")
+                                with col3:
+                                    st.metric("Most Consistent", f"{pivot_df.std(axis=1).min():.3f}")
+                                
                             else:
                                 st.info("Not enough data for heatmap visualization.")
                         except Exception as e:

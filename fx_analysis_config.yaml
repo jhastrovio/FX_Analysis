@@ -57,7 +57,7 @@ file_types:
         returns: "* - *"  # Pattern for model columns
     
     summary_stats:
-      pattern: "Summary_Statistics_{date_range}_{timestamp}.csv"
+      pattern: "{date_range}_Stats_{date}.csv"
       description: "Summary statistics for each model"
       location: "onedrive.processed_data"
     
@@ -111,7 +111,7 @@ file_types:
         returns: "* - *"  # Pattern for model columns
     
     summary_stats:
-      pattern: "Test_Summary_Statistics_{date_range}_{timestamp}.csv"
+      pattern: "Test_{date_range}_Stats_{date}.csv"
       description: "Test summary statistics for each model"
       location: "onedrive.test"
 
@@ -122,15 +122,24 @@ analysis:
   
   # Date ranges
   date_ranges:
-    full_period: "2000-01-01 to present"
-    recent_10y: "10 years"
-    recent_5y: "5 years"
-    recent_2y: "2 years"
-    recent_1y: "1 year"
+    full: "2000-01-01 to present"
+    10year: "10 years"
+    5year: "5 years"
+    2year: "2 years"
+    1year: "1 year"
+    6month: "6 months"
+    3month: "3 months"
+    2month: "2 months"
+    1month: "1 month"
+    1week: "1 week"
+    3day: "3 day"
+    1day: "1 day"
+
   
   # Performance metrics
   performance_metrics:
     - "annualized_return"
+    - "return"
     - "volatility"
     - "sharpe_ratio"
     - "max_drawdown"
