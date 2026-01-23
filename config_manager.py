@@ -3,7 +3,7 @@
 Configuration Manager for FX Analysis Project
 ============================================
 Provides centralized access to project configuration, file paths, and analysis parameters.
-This is a OneDrive-only implementation - all data is stored in the cloud.
+Uses local filesystem approach with OneDrive sync for cloud storage.
 """
 
 import os
@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
+from dotenv import load_dotenv
 
 class FXAnalysisConfig:
-    """Configuration manager for FX analysis project (OneDrive-only)."""
+    """Configuration manager for FX analysis project (Local filesystem with OneDrive sync)."""
     
     def __init__(self, config_file: str = "fx_analysis_config.yaml"):
         """Initialize configuration manager.
@@ -22,9 +23,26 @@ class FXAnalysisConfig:
         Args:
             config_file: Path to YAML configuration file
         """
+        # Load environment variables
+        if os.path.exists('.env'):
+            load_dotenv('.env', override=True)
+        
         self.config_file = Path(config_file)
         self.config = self._load_config()
         self._setup_logging()
+        
+        # Get OneDrive root path
+        self.od_root = os.getenv('OD')
+        if not self.od_root:
+            raise ValueError("Missing OD environment variable. Set OD to your OneDrive root path.")
+        
+        # Validate OneDrive path
+        if not os.path.exists(self.od_root):
+            raise ValueError(f"OneDrive path does not exist: {self.od_root}")
+        
+        # Validate it's the correct OneDrive location
+        if not self.od_root.endswith('FX_Data - General'):
+            raise ValueError(f"OD should point to 'FX_Data - General', not: {self.od_root}")
     
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from YAML file."""
@@ -49,15 +67,27 @@ class FXAnalysisConfig:
     
     # OneDrive storage path methods
     def get_onedrive_path(self, path_key: str) -> str:
-        """Get OneDrive storage path from configuration.
+        """Get OneDrive storage path from configuration (relative to OneDrive root).
         
         Args:
             path_key: Key for the specific OneDrive path
             
         Returns:
-            str: The configured OneDrive path
+            str: The configured OneDrive path (relative)
         """
         return self.config['storage']['onedrive'][path_key]
+    
+    def get_absolute_path(self, path_key: str) -> str:
+        """Get absolute filesystem path for OneDrive storage.
+        
+        Args:
+            path_key: Key for the specific OneDrive path
+            
+        Returns:
+            str: The absolute filesystem path
+        """
+        relative_path = self.get_onedrive_path(path_key)
+        return os.path.join(self.od_root, relative_path.replace('/', os.sep))
     
     def get_onedrive_file_path(self, path_key: str, filename: str) -> str:
         """Get full OneDrive file path by combining storage path with filename.

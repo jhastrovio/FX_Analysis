@@ -16,11 +16,10 @@ python Data_Consolidate.py --preview
 from __future__ import annotations
 
 import re
+import os
 from functools import reduce
 from pathlib import Path
 from typing import List, Optional
-import asyncio
-import io
 
 import pandas as pd
 import typer
@@ -44,11 +43,11 @@ def _gather_model_dfs(
     model_index: pd.DataFrame,
     verbose: bool = False,
 ) -> List[pd.DataFrame]:
-    """Fetch model CSVs from OneDrive via Graph API and return list of 2-column DataFrames."""
+    """Fetch model CSVs from local OneDrive folder and return list of 2-column DataFrames."""
     model_dfs: List[pd.DataFrame] = []
 
     try:
-        files = asyncio.run(storage.list_files(data_folder))
+        files = storage.list_files(data_folder)
         file_names = [f["name"] for f in files]
     except Exception as e:
         if verbose:
@@ -83,11 +82,11 @@ def _gather_model_dfs(
         col_label = f"{model_id} - {model_name}"
 
         try:
-            data = asyncio.run(storage.download_file(f"{data_folder}/{file_name}"))
-            df = pd.read_csv(io.StringIO(data.decode('utf-8')))
+            file_path = f"{data_folder}/{file_name}"
+            df = storage.download_csv(file_path)
         except Exception as e:
             if verbose:
-                typer.echo(f"Failed to download {file_name}: {e}")
+                typer.echo(f"Failed to read {file_name}: {e}")
             continue
 
         date_series = _find_date_column(df)
@@ -155,10 +154,9 @@ def main(
     model_index_path = f"{raw_data_path}/{model_index_config['pattern']}"
 
     try:
-        data = asyncio.run(storage.download_file(model_index_path))
-        model_index = pd.read_csv(io.StringIO(data.decode('utf-8')))
+        model_index = storage.download_csv(model_index_path)
     except Exception as e:
-        typer.echo(f"Failed to download metadata file {model_index_path}: {e}", err=True)
+        typer.echo(f"Failed to read metadata file {model_index_path}: {e}", err=True)
         raise typer.Exit(code=1)
 
     model_dfs = _gather_model_dfs(storage, raw_data_path, model_index, verbose)
@@ -180,12 +178,12 @@ def main(
         typer.echo(master_df.head())
         typer.echo(f"Shape: {master_df.shape}")
     else:
-        # Upload to OneDrive
+        # Save to OneDrive
         try:
-            asyncio.run(storage.upload_csv(out_path, master_df))
-            typer.echo(f"Master matrix uploaded to OneDrive: {out_path} (shape {master_df.shape})")
+            storage.upload_csv(out_path, master_df)
+            typer.echo(f"Master matrix saved to OneDrive: {out_path} (shape {master_df.shape})")
         except Exception as e:
-            typer.echo(f"Failed to upload to OneDrive: {e}", err=True)
+            typer.echo(f"Failed to save to OneDrive: {e}", err=True)
             raise typer.Exit(code=1)
 
 

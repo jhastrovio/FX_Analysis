@@ -1,43 +1,27 @@
-"""OneDrive Storage Module
-A reusable module for interacting with Microsoft OneDrive via Graph API.
-Supports reading, writing, listing, and deleting files.
+"""OneDrive Storage Module - Filesystem Implementation
+A simplified module for interacting with OneDrive via local filesystem operations.
+Uses OneDrive sync to handle cloud synchronization automatically.
 """
 
 import os
-import asyncio
 import io
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
-
-import aiohttp
-import msal
+from pathlib import Path, PurePosixPath
 import yaml
 import pandas as pd
 from dotenv import load_dotenv
 
-from pathlib import PurePosixPath
-
-# Constants
-GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0/users/{user_email}/drive/root:/{path}:/content"
-DEVICE_CACHE_PATH = os.path.expanduser("~/.onedrive_msal_cache.bin")
 
 class OneDriveStorage:
-    """OneDrive storage client for file operations."""
+    """OneDrive storage client using local filesystem operations."""
     
     def __init__(self, 
-                 client_id: str = None,
-                 client_secret: str = None,
-                 tenant_id: str = None,
-                 user_email: str = None,
                  env_file: str = ".env",
                  config_file: str = "onedrive_config.yaml"):
-        """Initialize OneDrive client with credentials.
+        """Initialize OneDrive client with local filesystem approach.
         
         Args:
-            client_id: Microsoft Graph API client ID
-            client_secret: Microsoft Graph API client secret
-            tenant_id: Microsoft tenant ID
-            user_email: User's email for OneDrive access
             env_file: Path to .env file (default: .env)
             config_file: Path to YAML config file (default: onedrive_config.yaml)
         """
@@ -45,14 +29,14 @@ class OneDriveStorage:
         if os.path.exists(env_file):
             load_dotenv(env_file, override=True)
         
-        # Use provided credentials or fall back to environment variables
-        self.client_id = client_id or os.getenv('ONEDRIVE_CLIENT_ID')
-        self.client_secret = client_secret or os.getenv('ONEDRIVE_CLIENT_SECRET')
-        self.tenant_id = tenant_id or os.getenv('ONEDRIVE_TENANT_ID')
-        self.user_email = user_email or os.getenv('ONEDRIVE_USER_EMAIL')
+        # Get OneDrive root path from environment
+        self.od_root = os.getenv('OD')
+        if not self.od_root:
+            raise ValueError("Missing OD environment variable. Set OD to your OneDrive root path.")
         
-        if not all([self.client_id, self.client_secret, self.tenant_id, self.user_email]):
-            raise ValueError("Missing OneDrive credentials. Provide them directly or via environment variables.")
+        # Validate OneDrive path exists and is accessible
+        if not os.path.exists(self.od_root):
+            raise ValueError(f"OneDrive path does not exist: {self.od_root}")
         
         # Load configuration
         self.config = self._load_config(config_file)
@@ -60,7 +44,28 @@ class OneDriveStorage:
     def _load_config(self, config_file: str) -> Dict:
         """Load configuration from YAML file."""
         if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Configuration file not found: {config_file}")
+            # Create a minimal default config if file doesn't exist
+            return {
+                'paths': {
+                    'base': 'clean/models_signals_systemacro',
+                    'raw_data': 'clean/models_signals_systemacro',
+                    'processed_data': 'clean/models_signals_systemacro/Processed',
+                    'logs': 'clean/models_signals_systemacro/Logs'
+                },
+                'file_patterns': {
+                    'systemacro_data': '{model_id}_{model_name}.csv',
+                    'processed_data': '{processed_type}_{timestamp}.csv'
+                },
+                'timestamp_formats': {
+                    'default': '%Y-%m-%d_%H-%M-%S',
+                    'daily': '%Y-%m-%d'
+                },
+                'content_types': {
+                    'csv': 'text/csv',
+                    'json': 'application/json',
+                    'txt': 'text/plain'
+                }
+            }
         
         with open(config_file, 'r') as f:
             return yaml.safe_load(f)
@@ -69,7 +74,7 @@ class OneDriveStorage:
         """Get a configured path from the config file.
         
         Args:
-            path_key: Dot-notation path key (e.g., 'market_data.hourly')
+            path_key: Dot-notation path key (e.g., 'raw_data')
             
         Returns:
             str: The configured path
@@ -84,19 +89,19 @@ class OneDriveStorage:
         """Get a full file path by combining a configured path with a filename.
 
         Args:
-            path_key: Dot-notation path key (e.g., 'market_data.hourly')
-            filename: The filename to append (e.g., 'rates_2024.csv')
+            path_key: Dot-notation path key (e.g., 'raw_data')
+            filename: The filename to append
 
         Returns:
-            str: The normalized POSIX-style full file path relative to OneDrive root.
-
-        Example:
-            get_file_path('reports.daily', 'summary.csv')
-            -> 'FX_Data/Reports/Daily/summary.csv'
+            str: The full file path relative to OneDrive root
         """
         base_path = self.get_path(path_key)
         full_path = str(PurePosixPath(base_path, filename))
         return full_path
+    
+    def _get_absolute_path(self, relative_path: str) -> str:
+        """Convert relative OneDrive path to absolute filesystem path."""
+        return os.path.join(self.od_root, relative_path.replace('/', os.sep))
     
     def format_filename(self, pattern_key: str, **kwargs) -> str:
         """Format a filename using a pattern from the config.
@@ -123,78 +128,35 @@ class OneDriveStorage:
         format_str = self.config['timestamp_formats'][format_key]
         return datetime.now().strftime(format_str)
 
-    def _get_access_token(self) -> str:
-        """Get Microsoft Graph access token using MSAL Client Credentials Flow."""
-        authority = f"https://login.microsoftonline.com/{self.tenant_id}"
-        scope = ["https://graph.microsoft.com/.default"]
-
-        # Use a persistent token cache
-        cache = msal.SerializableTokenCache()
-        if os.path.exists(DEVICE_CACHE_PATH):
-            cache.deserialize(open(DEVICE_CACHE_PATH, "r").read())
-        
-        app = msal.ConfidentialClientApplication(
-            client_id=self.client_id,
-            client_credential=self.client_secret,
-            authority=authority,
-            token_cache=cache
-        )
-
-        # Try to get token silently first
-        accounts = app.get_accounts()
-        if accounts:
-            result = app.acquire_token_silent(scope, account=accounts[0])
-            if result and "access_token" in result:
-                return result["access_token"]
-
-        # Use client credentials flow
-        result = app.acquire_token_for_client(scopes=scope)
-        
-        if "access_token" in result:
-            # Save cache
-            with open(DEVICE_CACHE_PATH, "w") as f:
-                f.write(cache.serialize())
-            return result["access_token"]
-        else:
-            raise RuntimeError(f"Failed to acquire token: {result.get('error_description', result)}")
-
-    async def _get_access_token_async(self, session: aiohttp.ClientSession) -> str:
-        """Async wrapper for getting access token."""
-        return await asyncio.get_event_loop().run_in_executor(None, self._get_access_token)
-
-    async def upload_file(self, path: str, data: bytes) -> None:
-        """Upload bytes to OneDrive at the given path.
+    def upload_file(self, path: str, data: bytes) -> None:
+        """Upload bytes to OneDrive at the given path using atomic write.
         
         Args:
             path: Target file path relative to OneDrive root
             data: Binary data to upload
         """
-        async with aiohttp.ClientSession() as session:
-            token = await self._get_access_token_async(session)
+        abs_path = self._get_absolute_path(path)
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        
+        # Atomic write: write to temp file then rename
+        temp_path = abs_path + ".tmp"
+        try:
+            with open(temp_path, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
             
-            # Determine content type based on file extension
-            ext = os.path.splitext(path)[1].lower().lstrip('.')
-            content_type = self.config['content_types'].get(ext, 'application/octet-stream')
-            
-            url = GRAPH_BASE_URL.format(user_email=self.user_email, path=path) + "?@microsoft.graph.conflictBehavior=replace"
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": content_type
-            }
-            
-            async with session.put(url, headers=headers, data=data) as resp:
-                try:
-                    resp.raise_for_status()
-                except aiohttp.ClientResponseError as e:
-                    if e.status == 423:
-                        raise RuntimeError(
-                            f"OneDrive file is locked (status 423).\n"
-                            "Please close the file in Excel or Office and retry upload."
-                        )
-                    else:
-                        raise
+            # Atomic rename
+            os.replace(temp_path, abs_path)
+        except Exception as e:
+            # Clean up temp file if it exists
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise e
 
-    async def download_file(self, path: str) -> bytes:
+    def download_file(self, path: str) -> bytes:
         """Download bytes from OneDrive at the given path.
         
         Args:
@@ -203,46 +165,63 @@ class OneDriveStorage:
         Returns:
             bytes: File contents
         """
-        url = GRAPH_BASE_URL.format(user_email=self.user_email, path=path)
-        async with aiohttp.ClientSession() as session:
-            token = await self._get_access_token_async(session)
-            headers = {"Authorization": f"Bearer {token}"}
-            async with session.get(url, headers=headers) as resp:
-                resp.raise_for_status()
-                return await resp.read()
+        abs_path = self._get_absolute_path(path)
+        
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"File not found: {path}")
+        
+        with open(abs_path, "rb") as f:
+            return f.read()
 
-    async def list_files(self, folder_path: str) -> List[Dict]:
+    def list_files(self, folder_path: str) -> List[Dict]:
         """List files in a OneDrive folder.
         
         Args:
             folder_path: Folder path relative to OneDrive root
             
         Returns:
-            List of file metadata dictionaries
+            List of file metadata dictionaries (compatible with Graph API format)
         """
-        url = f"https://graph.microsoft.com/v1.0/users/{self.user_email}/drive/root:/{folder_path}:/children"
-        async with aiohttp.ClientSession() as session:
-            token = await self._get_access_token_async(session)
-            headers = {"Authorization": f"Bearer {token}"}
-            async with session.get(url, headers=headers) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-                return data.get('value', [])
+        abs_folder_path = self._get_absolute_path(folder_path)
+        
+        if not os.path.exists(abs_folder_path):
+            return []
+        
+        files = []
+        try:
+            for item in os.listdir(abs_folder_path):
+                item_path = os.path.join(abs_folder_path, item)
+                stat = os.stat(item_path)
+                
+                # Create metadata dict compatible with Graph API format
+                file_info = {
+                    'name': item,
+                    'size': stat.st_size,
+                    'lastModifiedDateTime': datetime.fromtimestamp(stat.st_mtime).isoformat() + 'Z',
+                    'folder': os.path.isdir(item_path),
+                    'parentReference': {'path': folder_path},
+                    'id': f"local_{abs(hash(item_path))}",  # Generate pseudo-ID
+                    'webUrl': f"file://{item_path}"
+                }
+                files.append(file_info)
+        except PermissionError:
+            # Return empty list if we can't access the folder
+            pass
+        
+        return files
 
-    async def delete_file(self, path: str) -> None:
+    def delete_file(self, path: str) -> None:
         """Delete a file from OneDrive.
         
         Args:
             path: File path relative to OneDrive root
         """
-        url = f"https://graph.microsoft.com/v1.0/users/{self.user_email}/drive/root:/{path}"
-        async with aiohttp.ClientSession() as session:
-            token = await self._get_access_token_async(session)
-            headers = {"Authorization": f"Bearer {token}"}
-            async with session.delete(url, headers=headers) as resp:
-                resp.raise_for_status()
+        abs_path = self._get_absolute_path(path)
+        
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
 
-    async def upload_csv(self, path: str, df: pd.DataFrame) -> None:
+    def upload_csv(self, path: str, df: pd.DataFrame) -> None:
         """Upload a pandas DataFrame as a CSV file to OneDrive.
         
         Args:
@@ -252,9 +231,9 @@ class OneDriveStorage:
         with io.StringIO() as buffer:
             df.to_csv(buffer, index=False)
             data = buffer.getvalue().encode("utf-8")
-        await self.upload_file(path, data)
+        self.upload_file(path, data)
 
-    async def download_csv(self, path: str) -> pd.DataFrame:
+    def download_csv(self, path: str) -> pd.DataFrame:
         """Download a CSV file from OneDrive and return as a pandas DataFrame.
         
         Args:
@@ -263,27 +242,83 @@ class OneDriveStorage:
         Returns:
             pd.DataFrame: The CSV data as a DataFrame
         """
-        data = await self.download_file(path)
+        data = self.download_file(path)
         with io.StringIO(data.decode('utf-8')) as buffer:
             return pd.read_csv(buffer)
+
+    def file_exists(self, path: str) -> bool:
+        """Check if a file exists in OneDrive.
+        
+        Args:
+            path: File path relative to OneDrive root
+            
+        Returns:
+            bool: True if file exists, False otherwise
+        """
+        abs_path = self._get_absolute_path(path)
+        return os.path.exists(abs_path)
+
+    def get_file_size(self, path: str) -> int:
+        """Get file size in bytes.
+        
+        Args:
+            path: File path relative to OneDrive root
+            
+        Returns:
+            int: File size in bytes
+        """
+        abs_path = self._get_absolute_path(path)
+        if os.path.exists(abs_path):
+            return os.path.getsize(abs_path)
+        return 0
+
+
+# Backward compatibility - maintain async interface for existing code
+class AsyncOneDriveStorage(OneDriveStorage):
+    """Async wrapper for OneDriveStorage to maintain backward compatibility."""
+    
+    async def upload_file(self, path: str, data: bytes) -> None:
+        """Async wrapper for upload_file."""
+        super().upload_file(path, data)
+    
+    async def download_file(self, path: str) -> bytes:
+        """Async wrapper for download_file."""
+        return super().download_file(path)
+    
+    async def list_files(self, folder_path: str) -> List[Dict]:
+        """Async wrapper for list_files."""
+        return super().list_files(folder_path)
+    
+    async def delete_file(self, path: str) -> None:
+        """Async wrapper for delete_file."""
+        super().delete_file(path)
+    
+    async def upload_csv(self, path: str, df: pd.DataFrame) -> None:
+        """Async wrapper for upload_csv."""
+        super().upload_csv(path, df)
+    
+    async def download_csv(self, path: str) -> pd.DataFrame:
+        """Async wrapper for download_csv."""
+        return super().download_csv(path)
+
 
 # Example usage:
 """
 # Initialize the client
 storage = OneDriveStorage()
 
-# Save a market rates file with timestamp
+# Save a file with timestamp
 timestamp = storage.get_timestamp()
-filename = storage.format_filename('market_rates', timestamp=timestamp)
-path = storage.get_file_path('market_data.hourly', filename)
+filename = storage.format_filename('processed_data', processed_type='summary', timestamp=timestamp)
+path = storage.get_file_path('processed_data', filename)
 
 # Upload the file
-csv_data = "timestamp,symbol,price\n2024-01-01,EUR-USD,1.2345".encode('utf-8')
-await storage.upload_file(path, csv_data)
+csv_data = "model_id,return,volatility\n3995,0.12,0.15".encode('utf-8')
+storage.upload_file(path, csv_data)
 
 # List files in a configured folder
-files = await storage.list_files(storage.get_path('market_data.hourly'))
+files = storage.list_files(storage.get_path('raw_data'))
 
-# Download a config file
-config_data = await storage.download_file(storage.get_path('config.stream_config'))
+# Download a file
+data = storage.download_file(path)
 """

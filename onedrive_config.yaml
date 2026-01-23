@@ -1,21 +1,18 @@
-# OneDrive Storage Module Configuration
-# ===================================
+# OneDrive Storage Module Configuration (Local Filesystem Approach)
+# ===================================================================
 #
 # This configuration file works with onedrive_storage.py to provide a simple interface
-# for interacting with Microsoft OneDrive via Graph API.
+# for interacting with OneDrive via local filesystem operations.
 #
 # Setup Instructions:
 # ------------------
 # 1. Install required packages:
-#    pip install aiohttp msal python-dotenv pyyaml
+#    pip install python-dotenv pyyaml pandas
 #
-# 2. Create a .env file with these variables:
-#    ONEDRIVE_CLIENT_ID=your_client_id
-#    ONEDRIVE_CLIENT_SECRET=your_client_secret
-#    ONEDRIVE_TENANT_ID=your_tenant_id
-#    ONEDRIVE_USER_EMAIL=your_email
+# 2. Create a .env file with this variable:
+#    OD=/path/to/your/OneDrive/root
 #
-# 3. Copy both onedrive_storage.py and this config file to your project
+# 3. Ensure OneDrive client is installed and syncing
 #
 # Usage Example:
 # -------------
@@ -71,12 +68,15 @@
 # storage.list_files(folder_path)        # List files in folder
 # storage.delete_file(path)              # Delete file
 
-# Base paths for different types of data
+# Base paths for different types of data (relative to OneDrive root)
 paths:
-    base: "FX_Data/Systemacro_Data"
-    raw_data: "FX_Data/Systemacro_Data/Models"
-    processed_data: "FX_Data/Systemacro_Data/Processed"
-    logs: "FX_Data/Systemacro_Data/Logs"
+    base: "clean/models_signals_systemacro"
+    raw_data: "clean/models_signals_systemacro"
+    processed_data: "clean/models_signals_systemacro/Processed"
+    logs: "clean/models_signals_systemacro/Logs"
+    reports: "clean/models_signals_systemacro/Reports"
+    analysis: "clean/models_signals_systemacro/Analysis"
+    test: "clean/models_signals_systemacro/Test"
 # File naming patterns
 # Use {timestamp}, {date}, {week}, {model_id}, {model_name} as placeholders
 file_patterns:

@@ -12,16 +12,16 @@ project:
   description: "FX trading model analysis and portfolio construction"
   storage_type: "onedrive"
 
-# OneDrive Storage Configuration
+# OneDrive Storage Configuration (Local Filesystem Approach)
 storage:
   onedrive:
-    base_path: "FX_Data/Systemacro_Data"
-    raw_data: "FX_Data/Systemacro_Data/Models"
-    processed_data: "FX_Data/Systemacro_Data/Processed"
-    logs: "FX_Data/Systemacro_Data/Logs"
-    reports: "FX_Data/Systemacro_Data/Reports"
-    analysis: "FX_Data/Systemacro_Data/Analysis"
-    test: "FX_Data/Systemacro_Data/Test"
+    base_path: "clean/models_signals_systemacro"
+    raw_data: "clean/models_signals_systemacro"
+    processed_data: "clean/models_signals_systemacro/Processed"
+    logs: "clean/models_signals_systemacro/Logs"
+    reports: "clean/models_signals_systemacro/Reports"
+    analysis: "clean/models_signals_systemacro/Analysis"
+    test: "clean/models_signals_systemacro/Test"
 
 # File Type Definitions
 file_types:
@@ -166,7 +166,7 @@ portfolio:
   equal_weight:
     rebalance_frequency: "monthly"
     min_models: 10
-    max_models: 94
+    max_models: 100
  
 
 # Model Categories and Families

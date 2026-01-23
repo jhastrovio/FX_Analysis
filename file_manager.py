@@ -9,11 +9,9 @@ for managing files and folders in OneDrive.
 Setup:
 ------
 1. Ensure onedrive_storage.py and onedrive_config.yaml are in the same directory
-2. Set up your .env file with OneDrive credentials:
-   ONEDRIVE_CLIENT_ID=your_client_id
-   ONEDRIVE_CLIENT_SECRET=your_client_secret
-   ONEDRIVE_TENANT_ID=your_tenant_id
-   ONEDRIVE_USER_EMAIL=your_email
+2. Set up your .env file with OneDrive root path:
+   OD=/path/to/your/OneDrive/root
+3. Ensure OneDrive client is installed and syncing
 
 Usage Examples:
 --------------
@@ -47,9 +45,9 @@ from file_manager import list_files, explore_folder, get_folder_stats
 from onedrive_storage import OneDriveStorage
 
 storage = OneDriveStorage()
-files = await list_files(storage, 'base', pattern='*.csv', recursive=True)
-await explore_folder(storage, 'base', show_details=True)
-stats = await get_folder_stats(storage, 'base')
+files = list_files(storage, 'base', pattern='*.csv', recursive=True)
+explore_folder(storage, 'base', show_details=True)
+stats = get_folder_stats(storage, 'base')
 
 Key Features:
 ------------
@@ -59,18 +57,17 @@ Key Features:
 - File preview and metadata export
 - Folder statistics and analysis
 - CLI interface with Typer
-- Async operations for OneDrive API
+- Local filesystem operations with OneDrive sync
 - Error handling and user feedback
 
 Path Keys (from onedrive_config.yaml):
 -------------------------------------
-- 'base': FX_Data/Systemacro_Data
-- 'raw_data': FX_Data/Systemacro_Data/Models  
-- 'processed_data': FX_Data/Systemacro_Data/Processed
-- 'logs': FX_Data/Systemacro_Data/Logs
+- 'base': clean/systemacro_analysis
+- 'raw_data': clean/systemacro_analysis/Models  
+- 'processed_data': clean/systemacro_analysis/Processed
+- 'logs': clean/systemacro_analysis/Logs
 """
 
-import asyncio
 import pandas as pd
 import typer
 import datetime
@@ -80,7 +77,7 @@ from typing import List, Dict, Optional
 from onedrive_storage import OneDriveStorage
 
 
-async def list_files(
+def list_files(
     storage: OneDriveStorage,
     path_key: str,
     pattern: str = "*.csv",
@@ -105,11 +102,11 @@ async def list_files(
         List[Dict]: List of file metadata dictionaries
     """
     folder_path = storage.get_path(path_key)
-    files = await storage.list_files(folder_path)
+    files = storage.list_files(folder_path)
     
     filtered = []
     
-    async def process_folder(folder_path: str, current_files: List[Dict], depth: int = 0):
+    def process_folder(folder_path: str, current_files: List[Dict], depth: int = 0):
         """Recursively process folders and files."""
         for file_info in current_files:
             is_folder = file_info.get('folder', False)
@@ -125,16 +122,17 @@ async def list_files(
                     # Get subfolder path and recursively process
                     subfolder_path = f"{folder_path}/{file_info.get('name', '')}"
                     try:
-                        subfolder_files = await storage.list_files(subfolder_path)
-                        await process_folder(subfolder_path, subfolder_files, depth + 1)
+                        subfolder_files = storage.list_files(subfolder_path)
+                        process_folder(subfolder_path, subfolder_files, depth + 1)
                     except Exception as e:
                         typer.echo(f"⚠️  Could not access subfolder {file_info.get('name', '')}: {e}")
             else:
                 # Process files
                 filename = file_info.get('name', '')
                 
-                # Apply pattern filter
-                if not filename.endswith(pattern.replace('*', '')):
+                # Apply pattern filter with proper wildcard support
+                import fnmatch
+                if not fnmatch.fnmatch(filename, pattern):
                     continue
                     
                 # Apply size filter
@@ -155,11 +153,11 @@ async def list_files(
                 file_info['_is_folder'] = False
                 filtered.append(file_info)
     
-    await process_folder(folder_path, files)
+    process_folder(folder_path, files)
     return filtered
 
 
-async def list_folders(storage: OneDriveStorage, path_key: str, recursive: bool = False) -> List[Dict]:
+def list_folders(storage: OneDriveStorage, path_key: str, recursive: bool = False) -> List[Dict]:
     """
     List all folders in a OneDrive directory.
 
@@ -172,11 +170,11 @@ async def list_folders(storage: OneDriveStorage, path_key: str, recursive: bool 
         List[Dict]: List of folder metadata dictionaries
     """
     folder_path = storage.get_path(path_key)
-    items = await storage.list_files(folder_path)
+    items = storage.list_files(folder_path)
     
     folders = []
     
-    async def process_folders(current_path: str, current_items: List[Dict], depth: int = 0):
+    def process_folders(current_path: str, current_items: List[Dict], depth: int = 0):
         """Recursively process folders."""
         for item in current_items:
             if item.get('folder', False):
@@ -188,16 +186,16 @@ async def list_folders(storage: OneDriveStorage, path_key: str, recursive: bool 
                     # Get subfolder path and recursively process
                     subfolder_path = f"{current_path}/{item.get('name', '')}"
                     try:
-                        subfolder_items = await storage.list_files(subfolder_path)
-                        await process_folders(subfolder_path, subfolder_items, depth + 1)
+                        subfolder_items = storage.list_files(subfolder_path)
+                        process_folders(subfolder_path, subfolder_items, depth + 1)
                     except Exception as e:
                         typer.echo(f"⚠️  Could not access subfolder {item.get('name', '')}: {e}")
     
-    await process_folders(folder_path, items)
+    process_folders(folder_path, items)
     return folders
 
 
-async def explore_folder(storage: OneDriveStorage, path_key: str, show_details: bool = False) -> None:
+def explore_folder(storage: OneDriveStorage, path_key: str, show_details: bool = False) -> None:
     """
     Explore a OneDrive folder structure with a tree-like display.
 
@@ -207,12 +205,12 @@ async def explore_folder(storage: OneDriveStorage, path_key: str, show_details: 
         show_details (bool): Whether to show file details (size, date)
     """
     folder_path = storage.get_path(path_key)
-    items = await storage.list_files(folder_path)
+    items = storage.list_files(folder_path)
     
     typer.echo(f"\n📁 Exploring: {folder_path}")
     typer.echo("=" * 50)
     
-    async def display_tree(current_path: str, current_items: List[Dict], depth: int = 0):
+    def display_tree(current_path: str, current_items: List[Dict], depth: int = 0):
         """Display folder structure as a tree."""
         indent = "  " * depth
         
@@ -227,8 +225,8 @@ async def explore_folder(storage: OneDriveStorage, path_key: str, show_details: 
                 # Recursively explore subfolder
                 subfolder_path = f"{current_path}/{name}"
                 try:
-                    subfolder_items = await storage.list_files(subfolder_path)
-                    await display_tree(subfolder_path, subfolder_items, depth + 1)
+                    subfolder_items = storage.list_files(subfolder_path)
+                    display_tree(subfolder_path, subfolder_items, depth + 1)
                 except Exception as e:
                     typer.echo(f"{indent}  ⚠️  Cannot access: {e}")
             else:
@@ -240,10 +238,10 @@ async def explore_folder(storage: OneDriveStorage, path_key: str, show_details: 
                 else:
                     typer.echo(f"{indent}{icon} {name}")
     
-    await display_tree(folder_path, items)
+    display_tree(folder_path, items)
 
 
-async def get_folder_stats(storage: OneDriveStorage, path_key: str) -> Dict:
+def get_folder_stats(storage: OneDriveStorage, path_key: str) -> Dict:
     """
     Get statistics about a OneDrive folder.
 
@@ -255,7 +253,7 @@ async def get_folder_stats(storage: OneDriveStorage, path_key: str) -> Dict:
         Dict: Folder statistics
     """
     folder_path = storage.get_path(path_key)
-    items = await storage.list_files(folder_path)
+    items = storage.list_files(folder_path)
     
     stats = {
         'total_items': len(items),
@@ -299,11 +297,11 @@ async def get_folder_stats(storage: OneDriveStorage, path_key: str) -> Dict:
     return stats
 
 
-async def preview_file(storage: OneDriveStorage, path_key: str, filename: str, n: int = 5) -> pd.DataFrame:
+def preview_file(storage: OneDriveStorage, path_key: str, filename: str, n: int = 5) -> pd.DataFrame:
     """Load and preview the first few rows of a OneDrive file."""
     try:
         file_path = storage.get_file_path(path_key, filename)
-        df = await storage.download_csv(file_path)
+        df = storage.download_csv(file_path)
         typer.echo(f"\nPreview of: {filename} (rows: {len(df)}, columns: {len(df.columns)})")
         return df.head(n)
     except Exception as e:
@@ -311,18 +309,18 @@ async def preview_file(storage: OneDriveStorage, path_key: str, filename: str, n
         return pd.DataFrame()
 
 
-async def load_full_file(storage: OneDriveStorage, path_key: str, filename: str) -> pd.DataFrame:
+def load_full_file(storage: OneDriveStorage, path_key: str, filename: str) -> pd.DataFrame:
     """Load the complete file from OneDrive."""
     try:
         file_path = storage.get_file_path(path_key, filename)
-        df = await storage.download_csv(file_path)
+        df = storage.download_csv(file_path)
         return df
     except Exception as e:
         typer.echo(f"❌ Failed to read {filename}: {e}")
         return pd.DataFrame()
 
 
-async def delete_file(storage: OneDriveStorage, path_key: str, filename: str, confirm: bool = True) -> bool:
+def delete_file(storage: OneDriveStorage, path_key: str, filename: str, confirm: bool = True) -> bool:
     """Delete a file from OneDrive with optional confirmation."""
     if confirm:
         response = input(f"Are you sure you want to delete {filename}? [y/N] ")
@@ -332,7 +330,7 @@ async def delete_file(storage: OneDriveStorage, path_key: str, filename: str, co
     
     try:
         file_path = storage.get_file_path(path_key, filename)
-        await storage.delete_file(file_path)
+        storage.delete_file(file_path)
         typer.echo(f"✅ Deleted: {filename}")
         return True
     except Exception as e:
@@ -340,7 +338,7 @@ async def delete_file(storage: OneDriveStorage, path_key: str, filename: str, co
         return False
 
 
-async def export_file_list(files: List[Dict], output_path: str) -> None:
+def export_file_list(files: List[Dict], output_path: str) -> None:
     """
     Export list of OneDrive files and metadata to a CSV.
 
@@ -376,7 +374,7 @@ async def export_file_list(files: List[Dict], output_path: str) -> None:
     typer.echo(f"📄 Exported file list to {output_path}")
 
 
-async def upload_file(storage: OneDriveStorage, path_key: str, filename: str, data: bytes) -> bool:
+def upload_file(storage: OneDriveStorage, path_key: str, filename: str, data: bytes) -> bool:
     """
     Upload a file to OneDrive.
 
@@ -391,7 +389,7 @@ async def upload_file(storage: OneDriveStorage, path_key: str, filename: str, da
     """
     try:
         file_path = storage.get_file_path(path_key, filename)
-        await storage.upload_file(file_path, data)
+        storage.upload_file(file_path, data)
         typer.echo(f"✅ Uploaded: {filename}")
         return True
     except Exception as e:
@@ -399,7 +397,7 @@ async def upload_file(storage: OneDriveStorage, path_key: str, filename: str, da
         return False
 
 
-async def upload_csv(storage: OneDriveStorage, path_key: str, filename: str, df: pd.DataFrame) -> bool:
+def upload_csv(storage: OneDriveStorage, path_key: str, filename: str, df: pd.DataFrame) -> bool:
     """
     Upload a pandas DataFrame as CSV to OneDrive.
 
@@ -414,7 +412,7 @@ async def upload_csv(storage: OneDriveStorage, path_key: str, filename: str, df:
     """
     try:
         file_path = storage.get_file_path(path_key, filename)
-        await storage.upload_csv(file_path, df)
+        storage.upload_csv(file_path, df)
         typer.echo(f"✅ Uploaded CSV: {filename}")
         return True
     except Exception as e:
@@ -436,35 +434,43 @@ def list_onedrive_files(
     recursive: bool = typer.Option(False, help="Search subfolders recursively")
 ):
     """List files in OneDrive directory with optional filters."""
-    async def _list_files():
-        storage = OneDriveStorage()
-        
-        modified_after = None
-        if days_ago:
-            modified_after = datetime.datetime.now() - datetime.timedelta(days=days_ago)
-        
-        files = await list_files(storage, path_key, pattern, modified_after, min_size_kb, include_folders, recursive)
-        
-        if not files:
-            typer.echo("No files found matching criteria.")
-            return
-            
-        typer.echo(f"\nFound {len(files)} items in {path_key}:")
-        for file_info in files:
-            depth = file_info.get('_depth', 0)
-            indent = "  " * depth
-            is_folder = file_info.get('_is_folder', False)
-            
-            if is_folder:
-                icon = "📁"
-                typer.echo(f"{indent}{icon} {file_info.get('name', 'Unknown')}/")
-            else:
-                icon = "📄"
-                size_kb = round(file_info.get('size', 0) / 1024, 2)
-                modified = file_info.get('lastModifiedDateTime', 'Unknown')
-                typer.echo(f"{indent}{icon} {file_info.get('name', 'Unknown')} ({size_kb} KB) - {modified}")
+    storage = OneDriveStorage()
     
-    asyncio.run(_list_files())
+    modified_after = None
+    if days_ago:
+        modified_after = datetime.datetime.now() - datetime.timedelta(days=days_ago)
+    
+    files = list_files(storage, path_key, pattern, modified_after, min_size_kb, include_folders, recursive)
+    
+    if not files:
+        # Check if there are any items (folders) in the directory
+        folder_path = storage.get_path(path_key)
+        all_items = storage.list_files(folder_path)
+        if all_items:
+            folders_only = [item for item in all_items if item.get('folder', False)]
+            if folders_only and not include_folders:
+                typer.echo(f"No files found matching '{pattern}' in {path_key}.")
+                typer.echo(f"Found {len(folders_only)} folder(s). Use --include-folders to see them, or check subdirectories like 'raw_data' or 'processed_data'.")
+            else:
+                typer.echo("No files found matching criteria.")
+        else:
+            typer.echo(f"Directory '{path_key}' is empty.")
+        return
+        
+    typer.echo(f"\nFound {len(files)} items in {path_key}:")
+    for file_info in files:
+        depth = file_info.get('_depth', 0)
+        indent = "  " * depth
+        is_folder = file_info.get('_is_folder', False)
+        
+        if is_folder:
+            icon = "📁"
+            typer.echo(f"{indent}{icon} {file_info.get('name', 'Unknown')}/")
+        else:
+            icon = "📄"
+            size_kb = round(file_info.get('size', 0) / 1024, 2)
+            modified = file_info.get('lastModifiedDateTime', 'Unknown')
+            typer.echo(f"{indent}{icon} {file_info.get('name', 'Unknown')} ({size_kb} KB) - {modified}")
 
 
 @app.command()
@@ -474,13 +480,10 @@ def preview_onedrive_file(
     rows: int = typer.Option(5, help="Number of rows to preview")
 ):
     """Preview the first few rows of a OneDrive CSV file."""
-    async def _preview_file():
-        storage = OneDriveStorage()
-        df = await preview_file(storage, path_key, filename, rows)
-        if not df.empty:
-            typer.echo(df.to_string(index=False))
-    
-    asyncio.run(_preview_file())
+    storage = OneDriveStorage()
+    df = preview_file(storage, path_key, filename, rows)
+    if not df.empty:
+        typer.echo(df.to_string(index=False))
 
 
 @app.command()
@@ -490,20 +493,17 @@ def load_onedrive_file(
     output_file: str = typer.Option(None, help="Save to local CSV file")
 ):
     """Load the complete OneDrive CSV file."""
-    async def _load_file():
-        storage = OneDriveStorage()
-        df = await load_full_file(storage, path_key, filename)
-        if not df.empty:
-            typer.echo(f"✅ Loaded: {filename} (rows: {len(df)}, columns: {len(df.columns)})")
-            if output_file:
-                df.to_csv(output_file, index=False)
-                typer.echo(f"📄 Saved to: {output_file}")
-            else:
-                typer.echo(df.to_string(index=False))
+    storage = OneDriveStorage()
+    df = load_full_file(storage, path_key, filename)
+    if not df.empty:
+        typer.echo(f"✅ Loaded: {filename} (rows: {len(df)}, columns: {len(df.columns)})")
+        if output_file:
+            df.to_csv(output_file, index=False)
+            typer.echo(f"📄 Saved to: {output_file}")
         else:
-            typer.echo(f"❌ Failed to load {filename}")
-    
-    asyncio.run(_load_file())
+            typer.echo(df.to_string(index=False))
+    else:
+        typer.echo(f"❌ Failed to load {filename}")
 
 
 @app.command()
@@ -513,12 +513,9 @@ def export_onedrive_list(
     pattern: str = typer.Option("*.csv", help="File pattern filter")
 ):
     """Export OneDrive file list to CSV."""
-    async def _export_list():
-        storage = OneDriveStorage()
-        files = await list_files(storage, path_key, pattern)
-        await export_file_list(files, output_file)
-    
-    asyncio.run(_export_list())
+    storage = OneDriveStorage()
+    files = list_files(storage, path_key, pattern)
+    export_file_list(files, output_file)
 
 
 @app.command()
@@ -528,11 +525,8 @@ def delete_onedrive_file(
     force: bool = typer.Option(False, help="Skip confirmation prompt")
 ):
     """Delete a file from OneDrive."""
-    async def _delete_file():
-        storage = OneDriveStorage()
-        await delete_file(storage, path_key, filename, not force)
-    
-    asyncio.run(_delete_file())
+    storage = OneDriveStorage()
+    delete_file(storage, path_key, filename, not force)
 
 
 @app.command()
@@ -541,23 +535,20 @@ def list_onedrive_folders(
     recursive: bool = typer.Option(False, help="List subfolders recursively")
 ):
     """List folders in OneDrive directory."""
-    async def _list_folders():
-        storage = OneDriveStorage()
-        folders = await list_folders(storage, path_key, recursive)
-        
-        if not folders:
-            typer.echo("No folders found.")
-            return
-            
-        typer.echo(f"\nFound {len(folders)} folders in {path_key}:")
-        for folder_info in folders:
-            depth = folder_info.get('_depth', 0)
-            indent = "  " * depth
-            name = folder_info.get('name', 'Unknown')
-            modified = folder_info.get('lastModifiedDateTime', 'Unknown')
-            typer.echo(f"{indent}📁 {name}/ - {modified}")
+    storage = OneDriveStorage()
+    folders = list_folders(storage, path_key, recursive)
     
-    asyncio.run(_list_folders())
+    if not folders:
+        typer.echo("No folders found.")
+        return
+        
+    typer.echo(f"\nFound {len(folders)} folders in {path_key}:")
+    for folder_info in folders:
+        depth = folder_info.get('_depth', 0)
+        indent = "  " * depth
+        name = folder_info.get('name', 'Unknown')
+        modified = folder_info.get('lastModifiedDateTime', 'Unknown')
+        typer.echo(f"{indent}📁 {name}/ - {modified}")
 
 
 @app.command()
@@ -566,11 +557,8 @@ def explore_onedrive_folder(
     details: bool = typer.Option(False, help="Show file details (size, date)")
 ):
     """Explore OneDrive folder structure with tree view."""
-    async def _explore_folder():
-        storage = OneDriveStorage()
-        await explore_folder(storage, path_key, details)
-    
-    asyncio.run(_explore_folder())
+    storage = OneDriveStorage()
+    explore_folder(storage, path_key, details)
 
 
 @app.command()
@@ -578,28 +566,25 @@ def folder_stats(
     path_key: str = typer.Argument(..., help="Path key from config")
 ):
     """Get statistics about a OneDrive folder."""
-    async def _get_stats():
-        storage = OneDriveStorage()
-        stats = await get_folder_stats(storage, path_key)
-        
-        typer.echo(f"\n📊 Folder Statistics for {path_key}:")
-        typer.echo("=" * 40)
-        typer.echo(f"Total items: {stats['total_items']}")
-        typer.echo(f"Files: {stats['files']}")
-        typer.echo(f"Folders: {stats['folders']}")
-        typer.echo(f"Total size: {stats['total_size_mb']} MB")
-        
-        if stats['file_types']:
-            typer.echo(f"\nFile types:")
-            for ext, count in sorted(stats['file_types'].items()):
-                typer.echo(f"  .{ext}: {count} files")
-        
-        if stats['oldest_file']:
-            typer.echo(f"\nOldest file: {stats['oldest_file']}")
-        if stats['newest_file']:
-            typer.echo(f"Newest file: {stats['newest_file']}")
+    storage = OneDriveStorage()
+    stats = get_folder_stats(storage, path_key)
     
-    asyncio.run(_get_stats())
+    typer.echo(f"\n📊 Folder Statistics for {path_key}:")
+    typer.echo("=" * 40)
+    typer.echo(f"Total items: {stats['total_items']}")
+    typer.echo(f"Files: {stats['files']}")
+    typer.echo(f"Folders: {stats['folders']}")
+    typer.echo(f"Total size: {stats['total_size_mb']} MB")
+    
+    if stats['file_types']:
+        typer.echo(f"\nFile types:")
+        for ext, count in sorted(stats['file_types'].items()):
+            typer.echo(f"  .{ext}: {count} files")
+    
+    if stats['oldest_file']:
+        typer.echo(f"\nOldest file: {stats['oldest_file']}")
+    if stats['newest_file']:
+        typer.echo(f"Newest file: {stats['newest_file']}")
 
 
 if __name__ == "__main__":

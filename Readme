@@ -1,6 +1,6 @@
 # FX_Analysis
 
-This project focuses on analyzing daily return data from 94 FX trading models, some of which date back to the year 2000. The primary goals are to perform robust exploratory data analysis (EDA), build a consolidated master return matrix, and evaluate different portfolio construction techniques.
+This project focuses on analyzing daily return data from 100 FX trading models, some of which date back to the year 2000. The primary goals are to perform robust exploratory data analysis (EDA), build a consolidated master return matrix, and evaluate different portfolio construction techniques.
 
 ## Objectives
 
@@ -8,13 +8,13 @@ This project focuses on analyzing daily return data from 94 FX trading models, s
 - Annotate models using metadata (e.g., model ID, name, category, and family)
 - Perform exploratory analysis including:
   - Summary statistics (annualized return, volatility, Sharpe ratio, max drawdown)
-  - Correlation analysis
-  - Drawdown and rolling performance metrics
+  - Correlation analysis (available in Streamlit dashboard)
+  - Drawdown and rolling performance metrics (configuration ready, dedicated scripts planned)
 - Experiment with portfolio construction techniques:
-  - Equal weighting
-  - Risk parity
-  - Mean-variance optimization
-  - Hierarchical risk parity
+  - Equal weighting (✅ implemented)
+  - Risk parity (planned)
+  - Mean-variance optimization (planned)
+  - Hierarchical risk parity (planned)
 - Enable grouping and filtering based on model metadata (e.g., strategy category or methodology)
 
 ## Enhanced Configuration System
@@ -26,7 +26,7 @@ The project now uses a comprehensive configuration-driven approach with `fx_anal
 - **Enhanced Naming Convention**: Output files include date ranges and timestamps (e.g., `Summary_Statistics_full_period_20250620_161350.csv`)
 - **Test Environment Support**: Separate test data configuration for development and testing
 - **Config-Driven Analysis**: Performance metrics, annualization factors, and analysis parameters all configurable
-- **OneDrive Integration**: Complete cloud storage integration with configurable paths
+- **OneDrive Integration**: Local filesystem operations with OneDrive sync for cloud storage
 
 ### Configuration Structure
 - **File Types**: Raw, processed, and test data file definitions with patterns and locations
@@ -37,19 +37,25 @@ The project now uses a comprehensive configuration-driven approach with `fx_anal
 
 ## Structure
 
+### Local Project Files
 - `fx_analysis_config.yaml`: Comprehensive configuration file defining all project parameters
 - `config_manager.py`: Python module for accessing and managing configuration settings
 - `file_manager.py`: OneDrive file management interface with CLI commands for listing, exploring, and managing files
 - `Streamlit.py`: Interactive web dashboard for visualizing FX model performance data from OneDrive
-- `Model_Index.csv`: Metadata file containing model identifiers and classifications (stored in OneDrive)
-- `Models/`: Raw daily return CSVs named in the format `{model_id}_{model_name}.csv` (stored in OneDrive)
-- `Processed/`: Directory in OneDrive for outputs like the consolidated return matrix
-- `Test/`: Directory in OneDrive for test data and development
-- `Logs/`: Directory in OneDrive for logs and diagnostics
-- `onedrive_config.yaml`: OneDrive authentication and API configuration
-- `Data_Consolidate.py`: Script for merging raw model files into the master matrix using OneDrive Graph API
+- `onedrive_config.yaml`: OneDrive path configuration for local filesystem operations
+- `Data_Consolidate.py`: Script for merging raw model files into the master matrix
 - `summary_statistics.py`: Script for calculating performance metrics with config-driven approach
-- `onedrive_storage.py`: Module that interfaces with Microsoft Graph API to access and transfer files directly from OneDrive
+- `onedrive_storage.py`: Module for local filesystem operations with OneDrive sync
+
+### OneDrive Storage Structure
+All data is stored in OneDrive at `clean/systemacro_analysis/`:
+- `Models/`: Raw daily return CSVs named in the format `{model_id}_{model_name}.csv`
+  - `Model_Index.csv`: Metadata file containing model identifiers and classifications
+- `Processed/`: Output files like the consolidated return matrix and summary statistics
+- `Test/`: Test data and development files
+- `Logs/`: Log files and diagnostics
+- `Reports/`: Generated reports
+- `Analysis/`: Analysis output files
 
 ## Status
 
@@ -58,10 +64,12 @@ Enhanced development complete:
 - ✅ Enhanced naming convention with timestamps and date ranges
 - ✅ Test environment support with `--test` flag
 - ✅ Summary statistics with annualized metrics
-- ✅ OneDrive cloud access integrated via Microsoft Graph API
+- ✅ OneDrive integration via local filesystem operations with automatic cloud sync
 - ✅ Configurable performance metrics and analysis parameters
 - ✅ OneDrive file management CLI with folder exploration and statistics
 - ✅ Interactive Streamlit dashboard for FX model performance visualization
+- ✅ Correlation analysis available in Streamlit dashboard
+- ✅ Rolling metrics configuration (dedicated scripts planned)
 
 ## Environment Setup
 
@@ -76,15 +84,27 @@ source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### OneDrive Graph API Setup
+### OneDrive Setup
 
-Ensure you have a `.env` file in your project root with the following variables:
+The project uses local filesystem operations with OneDrive sync. Files are accessed via your local OneDrive folder, and changes are automatically synced to the cloud.
+
+**Prerequisites:**
+1. Install and set up the OneDrive desktop client
+2. Ensure OneDrive is syncing the folder containing your FX data
+
+**Environment Configuration:**
+
+Create a `.env` file in your project root with the following variable:
 
 ```
-ONEDRIVE_CLIENT_ID=your_client_id
-ONEDRIVE_CLIENT_SECRET=your_client_secret
-ONEDRIVE_TENANT_ID=your_tenant_id
-ONEDRIVE_USER_EMAIL=your_user_email
+OD=/path/to/your/OneDrive/root
 ```
 
-These credentials are used to authenticate with Microsoft Graph and access files stored in OneDrive.
+For example, if your OneDrive is located at `/Users/username/OneDrive`, set:
+```
+OD=/Users/username/OneDrive
+```
+
+**Important:** The `OD` path should point to your OneDrive root directory. The project expects data to be located at `{OD}/clean/systemacro_analysis/` (as configured in `onedrive_config.yaml`).
+
+**Note:** This approach uses local file operations rather than API calls, providing faster access and automatic cloud synchronization through the OneDrive client.

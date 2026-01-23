@@ -13,8 +13,6 @@ python summary_statistics.py            # Run and save to OneDrive
 
 from __future__ import annotations
 
-import asyncio
-import io
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import warnings
@@ -193,8 +191,7 @@ def load_master_matrix(storage: OneDriveStorage, config, test: bool = False) -> 
     # Load master return matrix
     master_matrix_path = config.get_full_file_path(file_type, 'master_matrix')
     try:
-        data = asyncio.run(storage.download_file(master_matrix_path))
-        master_matrix = pd.read_csv(io.StringIO(data.decode('utf-8')))
+        master_matrix = storage.download_csv(master_matrix_path)
         master_matrix['Date'] = pd.to_datetime(master_matrix['Date'])
         master_matrix.set_index('Date', inplace=True)
     except Exception as e:
@@ -203,8 +200,7 @@ def load_master_matrix(storage: OneDriveStorage, config, test: bool = False) -> 
     # Load model index
     model_index_path = config.get_full_file_path(model_index_type, 'model_index')
     try:
-        data = asyncio.run(storage.download_file(model_index_path))
-        model_index = pd.read_csv(io.StringIO(data.decode('utf-8')))
+        model_index = storage.download_csv(model_index_path)
     except Exception as e:
         raise RuntimeError(f"Failed to load model index: {e}")
     
@@ -386,7 +382,7 @@ def main(
             for col in float_columns:
                 summary_df[col] = summary_df[col].round(6)
             
-            asyncio.run(storage.upload_csv(output_path, summary_df))
+            storage.upload_csv(output_path, summary_df)
             data_type = "test" if test else "production"
             typer.echo(f"Summary statistics uploaded to OneDrive ({data_type}): {output_path}")
             typer.echo(f"Shape: {summary_df.shape}")
@@ -478,7 +474,7 @@ def all_ranges(
             output_path = config.get_full_file_path(output_file_type, analysis_type, 
                                                    date_range=range_name)
             
-            asyncio.run(storage.upload_csv(output_path, summary_df))
+            storage.upload_csv(output_path, summary_df)
             
             # Store summary info
             results_summary.append({

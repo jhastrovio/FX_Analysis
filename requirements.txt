@@ -1,10 +1,11 @@
 # Core libraries
 pandas>=2.0
 pyyaml>=6.0
-
-aiohttp>=3.9
-msal>=1.24
 python-dotenv>=1.0
+
+# Removed Graph API dependencies:
+# aiohttp>=3.9  # No longer needed for filesystem approach
+# msal>=1.24    # No longer needed for filesystem approach
 
 # CLI and dev utilities
 typer[all]>=0.9
