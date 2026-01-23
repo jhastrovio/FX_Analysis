@@ -35,4 +35,5 @@ dist/
 .ipynb_checkpoints/
 
 # OneDrive token cache
-*.bin 
+*.bin outputs/*
+__pycache__/

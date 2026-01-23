@@ -7,13 +7,14 @@ Calculates performance metrics for FX trading models from read-only data sources
 This script performs analytics on existing datasets. It does not produce authoritative
 datasets or modify source data. All outputs are ephemeral analysis artifacts.
 
-Note: Future structure - this will move to bin/summary_stats.py
 
 Usage:
 ------
-python summary_statistics.py --preview  # Preview results
-python summary_statistics.py --verbose  # Run with detailed logging
-python summary_statistics.py            # Run and save ephemeral outputs
+python -m lib.summary_statistics --preview  # Preview results
+python -m lib.summary_statistics --verbose  # Run with detailed logging
+python -m lib.summary_statistics            # Run and save ephemeral outputs
+# Or use bin entry point:
+python bin/summary_stats.py [OPTIONS]
 """
 
 from __future__ import annotations
@@ -25,8 +26,8 @@ import warnings
 import numpy as np
 import pandas as pd
 import typer
-from config_manager import get_config
-from onedrive_storage import OneDriveStorage
+from lib.config_manager import get_config
+from lib.onedrive_storage import OneDriveStorage
 
 app = typer.Typer(add_completion=False, invoke_without_command=True, help="Analytics-only: Calculate performance metrics from read-only data")
 

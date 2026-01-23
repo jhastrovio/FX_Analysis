@@ -44,8 +44,8 @@ python file_manager.py delete-onedrive-file base "old_file.csv"
 
 Programmatic Usage:
 ------------------
-from file_manager import list_files, explore_folder, get_folder_stats
-from onedrive_storage import OneDriveStorage
+from lib.file_manager import list_files, explore_folder, get_folder_stats
+from lib.onedrive_storage import OneDriveStorage
 
 storage = OneDriveStorage()
 files = list_files(storage, 'base', pattern='*.csv', recursive=True)
@@ -77,7 +77,7 @@ import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from onedrive_storage import OneDriveStorage
+from lib.onedrive_storage import OneDriveStorage
 
 
 def list_files(

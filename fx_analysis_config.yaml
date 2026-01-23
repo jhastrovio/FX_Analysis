@@ -1,9 +1,12 @@
 # FX Analysis Project Configuration
 # =================================
-# This configuration file defines all file types, naming patterns, storage locations,
-# and analysis parameters for the FX analysis project.
-# 
-# NOTE: This is a OneDrive-only implementation - all data is stored in the cloud.
+# Analytics-only: Configuration for read-only data access and analysis parameters.
+#
+# This file defines analysis parameters, metrics, and output formats. It does NOT
+# define dataset paths or schemas - those come from the master manifest.
+#
+# NOTE: All data access is read-only with respect to /FX_Data - General.
+# Outputs are ephemeral analysis artifacts, not authoritative datasets.
 
 # Project Information
 project:
@@ -46,12 +49,13 @@ file_types:
         category: "CATEGORY"
         family: "FAMILY"
   
-  # Processed data files (stored in OneDrive)
+  # Processed data files (ephemeral analysis artifacts)
   processed:
     master_matrix:
       pattern: "Master_Return_Matrix.csv"
-      description: "Consolidated daily returns for all models"
+      description: "Temporary consolidated daily returns for analysis (ephemeral, not authoritative)"
       location: "onedrive.processed_data"
+      # Note: Legacy name 'master_matrix'. This is a temporary analysis artifact.
       columns:
         date: "Date"
         returns: "* - *"  # Pattern for model columns

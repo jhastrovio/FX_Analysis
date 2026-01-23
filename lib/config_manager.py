@@ -7,7 +7,6 @@ Analytics-only: Provides configuration for read-only data access and analysis pa
 This module manages configuration for analytics workflows. It does not handle
 data production, ingestion, or dataset creation. All data access is read-only.
 
-Note: Future structure - this will move to lib/config.py
 """
 
 import os

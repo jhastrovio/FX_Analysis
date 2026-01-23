@@ -5,7 +5,6 @@ This module provides read-only access to datasets in the FX data estate via
 local filesystem operations. It does not handle data production or write
 authoritative datasets.
 
-Note: Future structure - this will move to lib/data/onedrive_storage.py
 """
 
 import os
