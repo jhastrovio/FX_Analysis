@@ -13,18 +13,30 @@ project:
   name: "FX_Analysis"
   version: "1.0.0"
   description: "FX trading model analysis and portfolio construction"
-  storage_type: "onedrive"
+  storage_type: "hybrid"
 
 # OneDrive Storage Configuration (Local Filesystem Approach)
 storage:
   onedrive:
-    base_path: "clean/models_signals_systemacro"
     raw_data: "clean/models_signals_systemacro"
     processed_data: "clean/models_signals_systemacro/Processed"
-    logs: "clean/models_signals_systemacro/Logs"
-    reports: "clean/models_signals_systemacro/Reports"
-    analysis: "clean/models_signals_systemacro/Analysis"
     test: "clean/models_signals_systemacro/Test"
+  local:
+    outputs: "outputs"
+    consolidated: "outputs/consolidated"
+    summary_stats: "outputs/summary_stats"
+    analysis: "outputs/analysis"
+    logs: "outputs/logs"
+    test: "outputs/test"
+
+# Analysis Input File Paths
+# Specific file paths for analysis scripts (can be overridden via CLI arguments)
+# Paths can be absolute or relative to OneDrive root (for onedrive.* entries)
+analysis_inputs:
+  onedrive:
+    portfolio_allocations: "_meta/Portfolio_Allocations_JH.csv"  # Relative to OneDrive root
+    model_returns_unscaled: null  # Relative path in processed_data, or override via CLI --model-returns
+    final_positions: "auth/positions_derived/Year=2026/YM=Jan_26/positions_derived-20260122.csv"  # Relative to OneDrive root, or override via CLI --final-positions
 
 # File Type Definitions
 file_types:
@@ -49,12 +61,12 @@ file_types:
         category: "CATEGORY"
         family: "FAMILY"
   
-  # Processed data files (ephemeral analysis artifacts)
+  # Processed data files (ephemeral analysis artifacts stored locally)
   processed:
     master_matrix:
       pattern: "Master_Return_Matrix.csv"
       description: "Temporary consolidated daily returns for analysis (ephemeral, not authoritative)"
-      location: "onedrive.processed_data"
+      location: "local.consolidated"
       # Note: Legacy name 'master_matrix'. This is a temporary analysis artifact.
       columns:
         date: "Date"
@@ -63,34 +75,34 @@ file_types:
     summary_stats:
       pattern: "{date_range}_Stats_{date}.csv"
       description: "Summary statistics for each model"
-      location: "onedrive.processed_data"
+      location: "local.summary_stats"
     
     correlation_matrix:
       pattern: "Correlation_Matrix_{date_range}_{timestamp}.csv"
       description: "Correlation matrix between all models"
-      location: "onedrive.processed_data"
+      location: "local.analysis"
     
     rolling_metrics:
       pattern: "Rolling_Metrics_{date_range}_{window}_{timestamp}.csv"
       description: "Rolling performance metrics over time"
-      location: "onedrive.processed_data"
+      location: "local.analysis"
     
     portfolio_weights:
       pattern: "Portfolio_Weights_{strategy}_{date_range}_{timestamp}.csv"
       description: "Portfolio weights for different strategies"
-      location: "onedrive.processed_data"
+      location: "local.analysis"
     
     performance_analysis:
       pattern: "Performance_Analysis_{analysis_type}_{date_range}_{timestamp}.csv"
       description: "Performance analysis results"
-      location: "onedrive.analysis"
+      location: "local.analysis"
 
-  # Test data files (stored in OneDrive test folder)
+  # Test data files (read-only inputs in OneDrive, ephemeral outputs local)
   test:
     model_returns:
       pattern: "test_{model_id}_{model_name}.csv"
       description: "Test individual model daily return files"
-      location: "onedrive.test"
+      location: "local.test"
       columns:
         date: ["Date", "date", "DATE"]
         returns: ["ID:*", "Returns", "returns"]
@@ -99,7 +111,7 @@ file_types:
     model_index:
       pattern: "Test_Model_Index.csv"
       description: "Test model metadata and classification file"
-      location: "onedrive.test"
+      location: "local.test"
       columns:
         id: "ID"
         name: "Name"
@@ -204,12 +216,12 @@ model_classification:
     - "time series mr"
     - "IP growth"
 
-# Logging Configuration (logs stored in OneDrive)
+# Logging Configuration (logs stored locally)
 logging:
   level: "INFO"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   file_pattern: "fx_analysis_{timestamp}.log"
-  location: "onedrive.logs"
+  location: "local.logs"
   max_files: 10
   max_size: "10MB"
 

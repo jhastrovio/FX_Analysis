@@ -1,5 +1,5 @@
 """OneDrive Storage Module - Filesystem Implementation
-Analytics-only: Read-only data access layer for FX data estate.
+Analytics-only: Read-only data access layer for OneDrive input datasets.
 
 This module provides read-only access to datasets in the FX data estate via
 local filesystem operations. It does not handle data production or write
@@ -8,7 +8,6 @@ authoritative datasets.
 """
 
 import os
-import io
 from typing import List, Dict, Optional
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -18,12 +17,7 @@ from dotenv import load_dotenv
 
 
 class OneDriveStorage:
-    """OneDrive storage client for read-only data access.
-    
-    Analytics-only: Provides read access to datasets in the FX data estate.
-    Write operations (upload_file, upload_csv) are for ephemeral outputs only,
-    not for writing back to the governed data estate.
-    """
+    """OneDrive storage client for read-only data access."""
     
     def __init__(self, 
                  env_file: str = ".env",
@@ -138,35 +132,10 @@ class OneDriveStorage:
         return datetime.now().strftime(format_str)
 
     def upload_file(self, path: str, data: bytes) -> None:
-        """Write bytes to local filesystem (for ephemeral outputs only).
-        
-        Note: This is for writing temporary analysis artifacts, not for writing
-        back to the governed data estate at /FX_Data - General.
-        
-        Args:
-            path: Target file path relative to OneDrive root
-            data: Binary data to write
-        """
-        abs_path = self._get_absolute_path(path)
-        
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-        
-        # Atomic write: write to temp file then rename
-        temp_path = abs_path + ".tmp"
-        try:
-            with open(temp_path, "wb") as f:
-                f.write(data)
-                f.flush()
-                os.fsync(f.fileno())  # Force write to disk
-            
-            # Atomic rename
-            os.replace(temp_path, abs_path)
-        except Exception as e:
-            # Clean up temp file if it exists
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            raise e
+        """Blocked: OneDrive input datasets are read-only for FX_Analysis."""
+        raise RuntimeError(
+            "Read-only contract violation: FX_Analysis must not write to OneDrive input datasets."
+        )
 
     def download_file(self, path: str) -> bytes:
         """Read bytes from FX data estate (read-only).
@@ -223,30 +192,16 @@ class OneDriveStorage:
         return files
 
     def delete_file(self, path: str) -> None:
-        """Delete a file from OneDrive.
-        
-        Args:
-            path: File path relative to OneDrive root
-        """
-        abs_path = self._get_absolute_path(path)
-        
-        if os.path.exists(abs_path):
-            os.remove(abs_path)
+        """Blocked: OneDrive input datasets are read-only for FX_Analysis."""
+        raise RuntimeError(
+            "Read-only contract violation: FX_Analysis must not delete from OneDrive input datasets."
+        )
 
     def upload_csv(self, path: str, df: pd.DataFrame) -> None:
-        """Write a pandas DataFrame as CSV (for ephemeral outputs only).
-        
-        Note: This is for writing temporary analysis artifacts, not for writing
-        back to the governed data estate at /FX_Data - General.
-        
-        Args:
-            path: Target file path relative to OneDrive root
-            df: DataFrame to write
-        """
-        with io.StringIO() as buffer:
-            df.to_csv(buffer, index=False)
-            data = buffer.getvalue().encode("utf-8")
-        self.upload_file(path, data)
+        """Blocked: OneDrive input datasets are read-only for FX_Analysis."""
+        raise RuntimeError(
+            "Read-only contract violation: FX_Analysis must not write CSV outputs into OneDrive inputs."
+        )
 
     def download_csv(self, path: str) -> pd.DataFrame:
         """Read a CSV file from FX data estate (read-only).
@@ -319,21 +274,7 @@ class AsyncOneDriveStorage(OneDriveStorage):
 
 # Example usage:
 """
-# Initialize the client
 storage = OneDriveStorage()
-
-# Save a file with timestamp
-timestamp = storage.get_timestamp()
-filename = storage.format_filename('processed_data', processed_type='summary', timestamp=timestamp)
-path = storage.get_file_path('processed_data', filename)
-
-# Upload the file
-csv_data = "model_id,return,volatility\n3995,0.12,0.15".encode('utf-8')
-storage.upload_file(path, csv_data)
-
-# List files in a configured folder
 files = storage.list_files(storage.get_path('raw_data'))
-
-# Download a file
-data = storage.download_file(path)
+data = storage.download_file("clean/models_signals_systemacro/Model_Index.csv")
 """

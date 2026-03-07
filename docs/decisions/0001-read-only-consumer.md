@@ -1,5 +1,7 @@
 # Read-Only Consumer Boundary
 
+This decision record explains the rationale behind the boundary. For the current contributor-facing contract, start with [03-read-only-contract.md](/Users/jameshassett/dev/FX_Analysis/docs/03-read-only-contract.md). For the current system interaction model with the Systemacro Research System, the Systemacro Website, and the OneDrive Data Store, see [07-systemacro-data-architecture.md](/Users/jameshassett/dev/FX_Analysis/docs/07-systemacro-data-architecture.md).
+
 ## The Decision
 
 FX_Analysis is read-only with respect to `/FX_Data - General`. It never writes, modifies, or deletes anything in that directory tree.

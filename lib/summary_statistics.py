@@ -37,6 +37,20 @@ warnings.filterwarnings('ignore')
 # Set pandas display options for consistent float formatting
 pd.set_option('display.float_format', '{:.6f}'.format)
 
+
+def _load_csv_from_target(storage: OneDriveStorage, target: Dict[str, str]) -> pd.DataFrame:
+    """Load CSV data from either OneDrive input storage or a local output path."""
+    if target['storage'] == 'onedrive':
+        return storage.download_csv(target['path'])
+    return pd.read_csv(target['path'])
+
+
+def _write_local_csv(df: pd.DataFrame, output_path: str) -> None:
+    """Write an ephemeral analysis artifact to a local path."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
+
 class FXPerformanceCalculator:
     """Calculate performance metrics for FX trading models.
     
@@ -203,18 +217,18 @@ def load_master_matrix(storage: OneDriveStorage, config, test: bool = False) -> 
     model_index_type = 'test' if test else 'raw'
     
     # Load master return matrix
-    master_matrix_path = config.get_full_file_path(file_type, 'master_matrix')
+    master_matrix_target = config.get_file_target(file_type, 'master_matrix')
     try:
-        master_matrix = storage.download_csv(master_matrix_path)
+        master_matrix = _load_csv_from_target(storage, master_matrix_target)
         master_matrix['Date'] = pd.to_datetime(master_matrix['Date'])
         master_matrix.set_index('Date', inplace=True)
     except Exception as e:
         raise RuntimeError(f"Failed to load master matrix: {e}")
     
     # Load model index
-    model_index_path = config.get_full_file_path(model_index_type, 'model_index')
+    model_index_target = config.get_file_target(model_index_type, 'model_index')
     try:
-        model_index = storage.download_csv(model_index_path)
+        model_index = _load_csv_from_target(storage, model_index_target)
     except Exception as e:
         raise RuntimeError(f"Failed to load model index: {e}")
     
@@ -392,7 +406,6 @@ def main(
         
         # Use test file type if test flag is set
         output_file_type = 'test' if test else 'processed'
-        # TODO: Future - write to outputs/ directory instead of OneDrive processed_data
         output_path = config.get_full_file_path(output_file_type, analysis_type, 
                                                date_range=date_range)
         
@@ -402,7 +415,7 @@ def main(
             for col in float_columns:
                 summary_df[col] = summary_df[col].round(6)
             
-            storage.upload_csv(output_path, summary_df)
+            _write_local_csv(summary_df, output_path)
             data_type = "test" if test else "analysis"
             typer.echo(f"Summary statistics saved (ephemeral, {data_type}): {output_path}")
             typer.echo(f"Shape: {summary_df.shape}")
@@ -492,11 +505,10 @@ def all_ranges(
             # Note: Temporary analysis artifacts, not authoritative datasets
             analysis_type = config.get_analysis_type('summary_statistics')
             output_file_type = 'test' if test else 'processed'
-            # TODO: Future - write to outputs/ directory instead of OneDrive processed_data
             output_path = config.get_full_file_path(output_file_type, analysis_type, 
                                                    date_range=range_name)
-            
-            storage.upload_csv(output_path, summary_df)
+
+            _write_local_csv(summary_df, output_path)
             
             # Store summary info
             results_summary.append({

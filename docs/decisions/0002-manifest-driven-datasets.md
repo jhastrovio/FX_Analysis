@@ -1,5 +1,7 @@
 # Manifest-Driven Dataset Selection
 
+This decision record explains why manifest-driven access exists. For the current operating model, start with [01-working-model.md](/Users/jameshassett/dev/FX_Analysis/docs/01-working-model.md) and [02-analysis-workflow.md](/Users/jameshassett/dev/FX_Analysis/docs/02-analysis-workflow.md).
+
 ## The Decision
 
 Datasets are referenced via a manifest, not hard-coded file paths. You select a dataset by name (e.g., `model_signals`), and the system resolves the actual path from the manifest.

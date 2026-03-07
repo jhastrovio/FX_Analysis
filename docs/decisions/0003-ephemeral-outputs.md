@@ -1,5 +1,7 @@
 # Ephemeral Outputs
 
+This decision record explains why outputs stay temporary. For the current contributor-facing guidance, start with [00-overview.md](/Users/jameshassett/dev/FX_Analysis/docs/00-overview.md) and [03-read-only-contract.md](/Users/jameshassett/dev/FX_Analysis/docs/03-read-only-contract.md).
+
 ## The Decision
 
 All outputs from FX_Analysis are temporary analysis artifacts written to a local `outputs/` directory. They are not written back to the governed data store at `/FX_Data - General`.

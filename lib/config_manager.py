@@ -35,6 +35,7 @@ class FXAnalysisConfig:
             load_dotenv('.env', override=True)
         
         self.config_file = Path(config_file)
+        self.repo_root = self.config_file.resolve().parent
         self.config = self._load_config()
         self._setup_logging()
         
@@ -109,6 +110,25 @@ class FXAnalysisConfig:
         """
         base_path = self.get_onedrive_path(path_key)
         return f"{base_path}/{filename}"
+
+    def get_local_path(self, path_key: str) -> str:
+        """Get local storage path from configuration (relative to repo root)."""
+        return self.config['storage']['local'][path_key]
+
+    def get_absolute_local_path(self, path_key: str) -> str:
+        """Get absolute local filesystem path from configuration."""
+        relative_path = self.get_local_path(path_key)
+        return str((self.repo_root / relative_path).resolve())
+
+    def resolve_storage_location(self, location: str) -> Dict[str, str]:
+        """Resolve a storage location reference to a storage type and base path."""
+        if location.startswith('onedrive.'):
+            storage_key = location.split('.', 1)[1]
+            return {'storage': 'onedrive', 'base_path': self.get_onedrive_path(storage_key)}
+        if location.startswith('local.'):
+            storage_key = location.split('.', 1)[1]
+            return {'storage': 'local', 'base_path': self.get_absolute_local_path(storage_key)}
+        return {'storage': 'local', 'base_path': str((self.repo_root / location).resolve())}
     
     # File type methods
     def get_file_type_config(self, file_category: str, file_type: str) -> Dict:
@@ -137,10 +157,46 @@ class FXAnalysisConfig:
         return self.get_file_type_config(file_category, file_type)['pattern']
     
     def get_file_location(self, file_category: str, file_type: str) -> str:
-        """Get OneDrive location for a specific file type."""
+        """Get resolved base location for a specific file type."""
         location_key = self.get_file_type_config(file_category, file_type)['location']
-        storage_type, path_key = location_key.split('.')
-        return self.get_onedrive_path(path_key)
+        return self.resolve_storage_location(location_key)['base_path']
+
+    def get_file_target(self, file_type: str, file_name: str,
+                        date_range: str = None, **kwargs) -> Dict[str, str]:
+        """Get target storage type and path for a configured file."""
+        if 'file_types' not in self.config:
+            raise ValueError("Config missing 'file_types' section")
+
+        if file_type not in self.config['file_types']:
+            raise ValueError(f"Unknown file type: {file_type}")
+
+        if file_name not in self.config['file_types'][file_type]:
+            raise ValueError(f"Unknown file name '{file_name}' in type '{file_type}'")
+
+        file_config = self.config['file_types'][file_type][file_name]
+        pattern = file_config['pattern']
+
+        if date_range and '{date_range}' in pattern:
+            pattern = pattern.replace('{date_range}', date_range)
+
+        if '{timestamp}' in pattern:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            pattern = pattern.replace('{timestamp}', timestamp)
+
+        if '{date}' in pattern:
+            date = datetime.now().strftime("%Y%m%d")
+            pattern = pattern.replace('{date}', date)
+
+        for key, value in kwargs.items():
+            placeholder = f'{{{key}}}'
+            if placeholder in pattern:
+                pattern = pattern.replace(placeholder, str(value))
+
+        resolved = self.resolve_storage_location(file_config['location'])
+        return {
+            'storage': resolved['storage'],
+            'path': f"{resolved['base_path']}/{pattern}",
+        }
     
     def get_full_file_path(self, file_type: str, file_name: str, 
                           date_range: str = None, **kwargs) -> str:
@@ -155,51 +211,7 @@ class FXAnalysisConfig:
         Returns:
             str: Full file path
         """
-        if 'file_types' not in self.config:
-            raise ValueError("Config missing 'file_types' section")
-        
-        if file_type not in self.config['file_types']:
-            raise ValueError(f"Unknown file type: {file_type}")
-        
-        if file_name not in self.config['file_types'][file_type]:
-            raise ValueError(f"Unknown file name '{file_name}' in type '{file_type}'")
-        
-        file_config = self.config['file_types'][file_type][file_name]
-        pattern = file_config['pattern']
-        
-        # Replace placeholders in pattern
-        if date_range and '{date_range}' in pattern:
-            pattern = pattern.replace('{date_range}', date_range)
-        
-        if '{timestamp}' in pattern:
-            from datetime import datetime
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            pattern = pattern.replace('{timestamp}', timestamp)
-        
-        if '{date}' in pattern:
-            from datetime import datetime
-            date = datetime.now().strftime("%Y%m%d")
-            pattern = pattern.replace('{date}', date)
-        
-        # Replace other placeholders from kwargs
-        for key, value in kwargs.items():
-            placeholder = f'{{{key}}}'
-            if placeholder in pattern:
-                pattern = pattern.replace(placeholder, str(value))
-        
-        # Get location and resolve OneDrive keys
-        location = file_config['location']
-        if location.startswith('onedrive.'):
-            # Extract OneDrive storage key, e.g., 'processed_data'
-            storage_key = location.split('.', 1)[1]
-            # Look up full path in config['storage']['onedrive']
-            onedrive_base = self.config['storage']['onedrive']
-            if storage_key not in onedrive_base:
-                raise ValueError(f"Unknown OneDrive storage key: {storage_key}")
-            full_path = onedrive_base[storage_key]
-            return f"{full_path}/{pattern}"
-        else:
-            return f"{location}/{pattern}"
+        return self.get_file_target(file_type, file_name, date_range=date_range, **kwargs)['path']
     
     # Analysis configuration methods
     def get_analysis_config(self, section: str) -> Dict[str, Any]:

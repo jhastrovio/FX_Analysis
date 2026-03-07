@@ -10,6 +10,7 @@ import os
 import re
 import csv
 from pathlib import Path
+from lib.config_manager import get_config
 
 def get_od_root():
     """Get OneDrive root path from .env or environment."""
@@ -80,29 +81,18 @@ def count_from_master_matrix(processed_path):
 
 def main():
     """Main function to count models."""
-    # Try the actual folder location first
-    actual_path = Path('/Users/jameshassett/Library/CloudStorage/OneDrive-IntellectiveCapitalPte.Ltd/FX_Data - General/clean/models_signals_systemacro')
-    
-    if actual_path.exists():
-        print(f"✅ Found data at: {actual_path}\n")
-        models_path = actual_path
-        # Check if Models is a subdirectory or if files are directly here
-        if (actual_path / "Models").exists():
-            models_path = actual_path / "Models"
-        processed_path = actual_path.parent / "systemacro_analysis" / "Processed"
-        if not processed_path.exists():
-            processed_path = actual_path / "Processed"
-            if not processed_path.exists():
-                processed_path = actual_path.parent / "Processed"
-    else:
-        # Fall back to config-based path
-        od_root = get_od_root()
-        if not od_root:
-            print("❌ Error: OD environment variable not set")
-            print("   Set it in .env file or environment")
-            return
-        models_path = Path(od_root) / "clean" / "systemacro_analysis" / "Models"
-        processed_path = Path(od_root) / "clean" / "systemacro_analysis" / "Processed"
+    od_root = get_od_root()
+    if not od_root:
+        print("❌ Error: OD environment variable not set")
+        print("   Set it in .env file or environment")
+        return
+
+    config = get_config()
+    models_path = Path(od_root) / config.get_onedrive_path("raw_data")
+    processed_path = Path(config.get_absolute_local_path("consolidated"))
+
+    print(f"✅ Using configured OneDrive input path: {models_path}")
+    print(f"✅ Using local ephemeral output path: {processed_path}\n")
     
     print("🔍 Checking model count from multiple sources...\n")
     

@@ -33,6 +33,13 @@ from lib.onedrive_storage import OneDriveStorage
 app = typer.Typer(add_completion=False, invoke_without_command=True, help="Analytics-only: Consolidate model returns for analysis")
 
 
+def _write_local_csv(df: pd.DataFrame, output_path: str) -> None:
+    """Write an ephemeral analysis artifact to a local path."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
+
+
 def _find_date_column(df: pd.DataFrame) -> Optional[pd.Series]:
     """Return a parsed datetime Series from plausible column names."""
     for col in ["Date", "Category", "date", "DATE"]:
@@ -187,8 +194,6 @@ def main(
     if output is not None:
         out_path = str(output)
     else:
-        # TODO: Future - write to outputs/ directory instead of OneDrive processed_data
-        # Current implementation writes to OneDrive for compatibility
         out_path = fx_config.get_full_file_path('processed', 'master_matrix')
 
     if preview:
@@ -198,7 +203,7 @@ def main(
         # Save ephemeral analysis output
         # Note: This is a temporary analytics artifact, not a permanent dataset
         try:
-            storage.upload_csv(out_path, master_df)
+            _write_local_csv(master_df, out_path)
             typer.echo(f"Consolidated matrix saved (ephemeral): {out_path} (shape {master_df.shape})")
         except Exception as e:
             typer.echo(f"Failed to save output: {e}", err=True)

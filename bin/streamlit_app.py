@@ -10,49 +10,25 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
-from lib.file_manager import list_files, load_full_file, get_folder_stats
-from lib.onedrive_storage import OneDriveStorage
-import datetime
 
 # --- Config ---
-# Analytics-only: Reads from read-only data sources
-# Note: Currently reads from OneDrive processed_data; future will use outputs/ directory
-onedrive_path_key = "processed_data"  # Maps to clean/models_signals_systemacro/Processed
+# Analytics-only: Reads local ephemeral analysis outputs
 default_pattern = "*.csv"
+summary_stats_dir = Path("outputs/summary_stats")
 
 st.set_page_config(page_title="FX Model Dashboard", layout="wide")
 st.title("📈 FX Model Summary Dashboard")
-st.caption("Analytics-only consumer: Read-only access to FX data estate")
-
-# --- Initialize OneDrive Storage ---
-@st.cache_resource
-def get_storage():
-    """Initialize OneDrive storage client with caching."""
-    try:
-        return OneDriveStorage()
-    except Exception as e:
-        st.error(f"Failed to initialize OneDrive connection: {e}")
-        return None
-
-storage = get_storage()
+st.caption("Analytics-only consumer: visualising local ephemeral analysis outputs")
 
 # --- File Selection ---
 st.sidebar.header("📂 File Selection")
 
-# Get files from OneDrive
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def get_file_list():
-    """Get list of files from OneDrive with caching."""
-    if storage is None:
+    """Get list of locally generated summary statistics files."""
+    if not summary_stats_dir.exists():
         return []
-    
-    try:
-        # Use direct function call (no longer async)
-        files = list_files(storage, onedrive_path_key, pattern=default_pattern)
-        return files
-    except Exception as e:
-        st.error(f"Failed to load files from OneDrive: {e}")
-        return []
+    return [{"name": path.name} for path in sorted(summary_stats_dir.glob(default_pattern))]
 
 files = get_file_list()
 file_options = [f.get('name', '') for f in files if not f.get('folder', False)]
@@ -75,14 +51,15 @@ else:
     )
 
 # --- Load & Display Selected File(s) ---
-if selected_files and storage:
+if selected_files:
     try:
         # Load all selected files
         all_dataframes = []
         file_names = []
         
         for filename in selected_files:
-            df = load_full_file(storage, onedrive_path_key, filename)
+            file_path = summary_stats_dir / filename
+            df = pd.read_csv(file_path)
             
             if not df.empty:
                 # Add period column if it exists in filename
@@ -673,24 +650,14 @@ if selected_files and storage:
         st.error(f"Failed to load or parse the files: {e}")
         st.error(f"Error details: {str(e)}")
 
-# --- OneDrive Status & Stats ---
-if storage:
-    st.sidebar.header("☁️ OneDrive Status")
-    
-    # Get folder statistics
-    try:
-        stats = get_folder_stats(storage, onedrive_path_key)
-        
-        st.sidebar.metric("Total Files", stats['files'])
-        st.sidebar.metric("Total Size", f"{stats['total_size_mb']} MB")
-        
-        if stats['file_types']:
-            st.sidebar.write("**File Types:**")
-            for ext, count in sorted(stats['file_types'].items()):
-                st.sidebar.write(f"• .{ext}: {count}")
-                
-    except Exception as e:
-        st.sidebar.error(f"Could not load stats: {e}")
-
+# --- Local Output Status ---
+st.sidebar.header("📁 Output Status")
+if summary_stats_dir.exists():
+    csv_files = list(summary_stats_dir.glob(default_pattern))
+    total_size_mb = round(sum(path.stat().st_size for path in csv_files) / (1024 * 1024), 2)
+    st.sidebar.metric("Total Files", len(csv_files))
+    st.sidebar.metric("Total Size", f"{total_size_mb} MB")
+    st.sidebar.caption(str(summary_stats_dir))
 else:
-    st.error("❌ OneDrive connection not available. Please check your configuration.")
+    st.sidebar.warning("No local summary outputs found yet.")
+    st.error("❌ No local summary statistics outputs found. Run the analysis scripts first.")

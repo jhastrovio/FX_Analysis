@@ -4,8 +4,7 @@ OneDrive File Manager
 Analytics-only: File management interface for read-only data access.
 
 Provides utilities for listing, exploring, and reading files from the FX data estate.
-All operations are read-only with respect to /FX_Data - General. Write operations
-are for ephemeral outputs only.
+All operations are read-only with respect to /FX_Data - General.
 
 Note: Future structure - this will move to lib/utils/file_manager.py
 
@@ -39,8 +38,7 @@ python file_manager.py preview-onedrive-file base "data.csv"
 # Export file list to CSV
 python file_manager.py export-onedrive-list base --output-file "inventory.csv"
 
-# Delete a file (with confirmation)
-python file_manager.py delete-onedrive-file base "old_file.csv"
+# Delete is intentionally disabled to preserve the read-only contract.
 
 Programmatic Usage:
 ------------------
@@ -324,21 +322,9 @@ def load_full_file(storage: OneDriveStorage, path_key: str, filename: str) -> pd
 
 
 def delete_file(storage: OneDriveStorage, path_key: str, filename: str, confirm: bool = True) -> bool:
-    """Delete a file from OneDrive with optional confirmation."""
-    if confirm:
-        response = input(f"Are you sure you want to delete {filename}? [y/N] ")
-        if response.lower() != 'y':
-            typer.echo("❌ Deletion cancelled.")
-            return False
-    
-    try:
-        file_path = storage.get_file_path(path_key, filename)
-        storage.delete_file(file_path)
-        typer.echo(f"✅ Deleted: {filename}")
-        return True
-    except Exception as e:
-        typer.echo(f"❌ Could not delete {filename}: {e}")
-        return False
+    """Blocked: FX_Analysis does not delete files from OneDrive inputs."""
+    typer.echo("❌ Delete is disabled. FX_Analysis is read-only with respect to OneDrive inputs.")
+    return False
 
 
 def export_file_list(files: List[Dict], output_path: str) -> None:
@@ -393,14 +379,8 @@ def upload_file(storage: OneDriveStorage, path_key: str, filename: str, data: by
     Returns:
         bool: True if successful, False otherwise
     """
-    try:
-        file_path = storage.get_file_path(path_key, filename)
-        storage.upload_file(file_path, data)
-        typer.echo(f"✅ Uploaded: {filename}")
-        return True
-    except Exception as e:
-        typer.echo(f"❌ Failed to upload {filename}: {e}")
-        return False
+    typer.echo("❌ Upload is disabled. Write temporary outputs to local outputs/ instead.")
+    return False
 
 
 def upload_csv(storage: OneDriveStorage, path_key: str, filename: str, df: pd.DataFrame) -> bool:
@@ -419,14 +399,8 @@ def upload_csv(storage: OneDriveStorage, path_key: str, filename: str, df: pd.Da
     Returns:
         bool: True if successful, False otherwise
     """
-    try:
-        file_path = storage.get_file_path(path_key, filename)
-        storage.upload_csv(file_path, df)
-        typer.echo(f"✅ Uploaded CSV: {filename}")
-        return True
-    except Exception as e:
-        typer.echo(f"❌ Failed to upload CSV {filename}: {e}")
-        return False
+    typer.echo("❌ Upload is disabled. Write temporary outputs to local outputs/ instead.")
+    return False
 
 
 # CLI Commands using Typer
@@ -459,7 +433,7 @@ def list_onedrive_files(
             folders_only = [item for item in all_items if item.get('folder', False)]
             if folders_only and not include_folders:
                 typer.echo(f"No files found matching '{pattern}' in {path_key}.")
-                typer.echo(f"Found {len(folders_only)} folder(s). Use --include-folders to see them, or check subdirectories like 'raw_data' or 'processed_data'.")
+                typer.echo(f"Found {len(folders_only)} folder(s). Use --include-folders to see them, or check the configured OneDrive subdirectories.")
             else:
                 typer.echo("No files found matching criteria.")
         else:
@@ -533,9 +507,8 @@ def delete_onedrive_file(
     filename: str = typer.Argument(..., help="Name of file to delete"),
     force: bool = typer.Option(False, help="Skip confirmation prompt")
 ):
-    """Delete a file from OneDrive."""
-    storage = OneDriveStorage()
-    delete_file(storage, path_key, filename, not force)
+    """Blocked: deleting from OneDrive is not allowed in FX_Analysis."""
+    typer.echo("❌ delete-onedrive-file is disabled. FX_Analysis is read-only with respect to OneDrive inputs.")
 
 
 @app.command()

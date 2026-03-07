@@ -1,9 +1,12 @@
-FX_Analysis — AI Background Context
+# FX_Analysis — AI Background Context
+
+This file is supplemental background for planning and implementation. For the canonical repo operating model, start with [00-overview.md](/Users/jameshassett/dev/FX_Analysis/docs/00-overview.md) through [06-maintenance.md](/Users/jameshassett/dev/FX_Analysis/docs/06-maintenance.md).
+Within that operating model, the Systemacro Research System produces upstream model outputs, the Systemacro Website serves as a presentation and metadata layer, and the OneDrive Data Store provides the structured operational inputs consumed by FX_Analysis in a read-only manner.
 Project Overview
 
 FX_Analysis is a personal Python analytics repository used to analyze and visualize FX data that is produced and governed elsewhere.
 
-This repo is not a data platform, ingestion system, or production pipeline. It is an analytics consumer built on top of an existing FX data estate.
+This repo is not a data platform, ingestion system, or production pipeline. It is an analytics consumer built on top of upstream Systemacro research outputs and the OneDrive Data Store.
 
 The goal is clarity, flexibility, and speed of analysis — not enterprise architecture.
 

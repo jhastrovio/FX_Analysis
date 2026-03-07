@@ -1,190 +1,45 @@
 # Maintenance Guide
 
-## Repository Structure Conventions
+This repo should stay lightweight, readable, and clearly inside the analytics-consumer boundary.
 
-FX_Analysis follows a `bin/` + `lib/` structure consistent with other internal analytics repositories:
+## Review Checklist
 
-```
-FX_Analysis/
-├── bin/                    # Executable scripts
-│   ├── consolidate.py      # Data consolidation CLI
-│   ├── summary_stats.py    # Performance metrics CLI
-│   └── streamlit_app.py    # Dashboard entry point
-├── lib/                    # Reusable modules
-│   ├── data/               # Data access layer
-│   ├── analytics/          # Analysis functions
-│   └── utils/              # Shared utilities
-├── outputs/                # Ephemeral outputs (gitignored)
-├── docs/                   # Documentation
-├── config/                 # Configuration files
-│   └── fx_analysis_config.yaml
-├── requirements.txt
-└── README.md
-```
+When reviewing doc or code changes, confirm:
 
-### bin/ Directory
+1. FX_Analysis remains read-only with respect to `/FX_Data - General`.
+2. Datasets are referenced through the manifest rather than hard-coded estate paths.
+3. Outputs stay local, temporary, and non-authoritative.
+4. New data needs are routed upstream through the data request path.
+5. The docs still make the repo’s role obvious to a new contributor.
+6. Descriptions of the Systemacro Research System, the Systemacro Website, and the OneDrive Data Store remain consistent with [07-systemacro-data-architecture.md](/Users/jameshassett/dev/FX_Analysis/docs/07-systemacro-data-architecture.md).
 
-Contains executable scripts and entry points:
+## Keeping The Boundaries Intact
 
-- **CLI Commands**: Typer-based command-line interfaces
-- **Streamlit App**: Dashboard application
-- **Workflow Scripts**: Multi-step analysis pipelines
+- Analysis logic belongs in this repo.
+- Authoritative data production does not.
+- Temporary exports are fine.
+- Permanent datasets are not.
 
-Scripts in `bin/` should be:
-- Executable and directly runnable
-- Well-documented with help text
-- Idempotent where possible
-- Following consistent argument patterns
+If a proposed change blurs those lines, stop and check [03-read-only-contract.md](/Users/jameshassett/dev/FX_Analysis/docs/03-read-only-contract.md), [04-data-request-contract.md](/Users/jameshassett/dev/FX_Analysis/docs/04-data-request-contract.md), and [05-extension-guidelines.md](/Users/jameshassett/dev/FX_Analysis/docs/05-extension-guidelines.md).
 
-### lib/ Directory
+## Maintaining The Doc Set
 
-Contains reusable Python modules organized by function:
+- Keep [00-overview.md](/Users/jameshassett/dev/FX_Analysis/docs/00-overview.md) short and stable.
+- Put operating-model changes in the top-level docs before adding new detail elsewhere.
+- Use the decision docs as background rationale, not as the main onboarding path.
+- Keep examples concrete and practical.
 
-- **data/**: Dataset loading, manifest integration, schema validation
-- **analytics/**: Performance calculations, statistical functions, portfolio methods
-- **utils/**: Configuration management, logging, file I/O
+## Change Hygiene
 
-Modules in `lib/` should be:
-- Importable and reusable
-- Well-documented with docstrings
-- Unit testable
-- Independent of execution context
+- Prefer small reversible edits.
+- Remove repeated explanations when one doc can say it clearly once.
+- Add cross-links when a workflow depends on a contract or template.
+- Document new metrics, dashboards, or scripts close to where contributors will look for them.
 
-## Adding New Workflows
+## Related Docs
 
-### 1. Define the Workflow
-
-Create a new script in `bin/`:
-
-```python
-#!/usr/bin/env python
-"""Description of what this workflow does."""
-
-import typer
-from lib.data import load_dataset
-from lib.analytics import your_analysis_function
-
-app = typer.Typer()
-
-@app.command()
-def run(
-    manifest_name: str = typer.Option(..., help="Dataset name from manifest"),
-    output: str = typer.Option("outputs/", help="Output directory"),
-):
-    """Execute the workflow."""
-    dataset = load_dataset(manifest_name)
-    results = your_analysis_function(dataset)
-    results.to_csv(f"{output}/results.csv")
-
-if __name__ == "__main__":
-    app()
-```
-
-### 2. Implement Analysis Logic
-
-Add reusable functions to `lib/analytics/`:
-
-```python
-# lib/analytics/your_analysis.py
-def your_analysis_function(dataset):
-    """Perform analysis on dataset."""
-    # Implementation
-    return results
-```
-
-### 3. Update Configuration
-
-Add any new parameters to `fx_analysis_config.yaml`:
-
-```yaml
-your_workflow:
-  parameter1: value1
-  parameter2: value2
-```
-
-### 4. Document the Workflow
-
-Add documentation to `docs/05-workflows.md` describing:
-- Purpose and use cases
-- Required inputs (manifest dataset names)
-- Outputs and their formats
-- Example usage
-
-### 5. Follow Conventions
-
-- **Manifest-Driven**: Always reference datasets by manifest name
-- **Read-Only**: Never write to `FX_DATA_ROOT`
-- **Output Isolation**: Write all results to `outputs/`
-- **Error Handling**: Validate inputs and provide clear errors
-- **Logging**: Use structured logging for debugging
-
-## Permanent Data Extensions
-
-**Important**: Permanent data extensions belong in the producer repository, not FX_Analysis.
-
-### What Belongs in Producer Repo
-
-- New dataset schemas
-- Data normalization logic
-- Reconciliation rules
-- Schema migrations
-- Data quality checks
-- Lifecycle management
-
-### What Belongs in FX_Analysis
-
-- Analytics calculations
-- Visualization code
-- Report generation
-- Temporary transformations
-- Derived metrics
-
-### Decision Process
-
-When considering where to add functionality:
-
-1. **Does it modify source data?** → Producer repo
-2. **Does it create a new authoritative dataset?** → Producer repo
-3. **Does it define a new schema?** → Producer repo
-4. **Is it a calculation or analysis?** → FX_Analysis
-5. **Is the output ephemeral?** → FX_Analysis
-
-If unsure, consult with the data platform team.
-
-## Code Review Guidelines
-
-When submitting changes:
-
-1. **Verify Read-Only Contract**: Ensure no writes to `FX_DATA_ROOT`
-2. **Check Manifest Usage**: Datasets referenced by name, not path
-3. **Test Output Isolation**: Confirm outputs go to `outputs/`
-4. **Update Documentation**: Keep docs in sync with code changes
-5. **Follow Structure**: Adhere to `bin/` + `lib/` conventions
-
-## Testing
-
-FX_Analysis should include:
-
-- **Unit Tests**: For `lib/` modules (analytics functions, utilities)
-- **Integration Tests**: For `bin/` scripts (end-to-end workflows)
-- **Contract Tests**: Verify read-only behavior, manifest compliance
-
-Tests should:
-- Use test datasets (not production data)
-- Validate outputs without modifying sources
-- Be runnable in CI/CD pipelines
-
-## Dependencies
-
-When adding dependencies:
-
-1. **Justify Need**: Explain why the dependency is required
-2. **Check Compatibility**: Ensure it works with existing stack
-3. **Update requirements.txt**: Pin versions appropriately
-4. **Document Usage**: Note any special configuration needed
-
-Avoid dependencies that:
-- Require system-level installation
-- Conflict with existing packages
-- Have unclear licensing
-- Are unmaintained or deprecated
+- [01-working-model.md](/Users/jameshassett/dev/FX_Analysis/docs/01-working-model.md)
+- [02-analysis-workflow.md](/Users/jameshassett/dev/FX_Analysis/docs/02-analysis-workflow.md)
+- [04-data-request-contract.md](/Users/jameshassett/dev/FX_Analysis/docs/04-data-request-contract.md)
+- [07-systemacro-data-architecture.md](/Users/jameshassett/dev/FX_Analysis/docs/07-systemacro-data-architecture.md)
+- [data_request_template.md](/Users/jameshassett/dev/FX_Analysis/docs/templates/data_request_template.md)

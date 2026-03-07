@@ -1,84 +1,55 @@
 # FX_Analysis Overview
 
-## What FX_Analysis Is
+FX_Analysis is a read-only analytics consumer. It reads governed FX datasets from the OneDrive Data Store, performs exploratory and repeatable analysis, and produces temporary outputs for research and review.
 
-FX_Analysis is a read-only analytics consumer application that performs exploratory data analysis, performance metrics calculation, and visualization on FX trading model datasets. It provides:
+## What It Is
 
-- **Performance Analytics**: Calculation of annualized returns, volatility, Sharpe ratios, and drawdown metrics
-- **Data Consolidation**: Merging of individual model return files into consolidated matrices
-- **Interactive Visualization**: Streamlit-based dashboards for exploring model performance
-- **Portfolio Analysis**: Framework for evaluating portfolio construction techniques
+- A place for analysis, metrics, comparisons, and visualisation
+- A consumer of governed datasets owned elsewhere
+- A lightweight repo for repeatable research workflows
 
-## What FX_Analysis Is Not
+## What It Is Not
 
-FX_Analysis is **not** a data producer. It does not:
+- Not a producer system
+- Not an ingestion or normalization pipeline
+- Not a canonical dataset layer
+- Not a place to publish permanent datasets back into `/FX_Data - General`
 
-- Ingest raw market data
-- Normalize or reconcile datasets
-- Produce authoritative datasets
-- Modify source data in any way
-- Write to the governed data estate
+## Where It Sits
 
-## Read-Only Contract
-
-FX_Analysis maintains a strict read-only contract with `/FX_Data - General`:
-
-- **Read Access Only**: All data access is read-only. No write, modify, or delete operations are permitted.
-- **No Data Modification**: Source datasets are never altered, transformed in-place, or overwritten.
-- **No Schema Changes**: Dataset schemas and structures are treated as immutable.
-- **No Lifecycle Management**: Dataset creation, archival, or deletion is handled exclusively by the producer repository.
-
-This contract ensures data governance integrity and prevents analytics workflows from affecting authoritative datasets.
-
-## Role in FX Data Platform
-
-FX_Analysis sits in the analytics layer of the FX data platform:
+In the current Systemacro architecture, the Systemacro Research System produces research outputs upstream, the Systemacro Website acts as a presentation and metadata layer, and the OneDrive Data Store provides the operational input datasets consumed by FX_Analysis.
 
 ```
 ┌─────────────────────────────────────┐
-│   Producer Repository               │
-│   (Ingestion, Normalization)        │
+│ Producer system                     │
+│ Ingestion, normalization, schemas   │
 └──────────────┬──────────────────────┘
-               │ writes
+               │ writes governed data
                ▼
 ┌─────────────────────────────────────┐
-│   /FX_Data - General                │
-│   (Governed Data Estate)            │
+│ /FX_Data - General                  │
+│ Authoritative datasets              │
 └──────────────┬──────────────────────┘
                │ read-only
                ▼
 ┌─────────────────────────────────────┐
-│   FX_Analysis                       │
-│   (Analytics Consumer)              │
+│ FX_Analysis                         │
+│ Analysis, metrics, dashboards       │
 └──────────────┬──────────────────────┘
-               │ writes
+               │ writes temporary files
                ▼
 ┌─────────────────────────────────────┐
-│   outputs/                          │
-│   (Ephemeral Analytics Artifacts)    │
+│ outputs/                            │
+│ Ephemeral analysis artifacts        │
 └─────────────────────────────────────┘
 ```
 
-The platform follows a clear separation of concerns:
+## Outputs
 
-1. **Producer Repository**: Handles all data ingestion, normalization, reconciliation, and dataset production
-2. **FX_Data - General**: Stores authoritative, governed datasets with defined schemas and lifecycle metadata
-3. **FX_Analysis**: Consumes datasets for analytics, producing ephemeral outputs
+FX_Analysis can create consolidated views, summary statistics, charts, reports, and other temporary analysis artifacts. These outputs are local, regenerable, and non-authoritative.
 
-## Output Location
+## Key Rule
 
-All analytics outputs are written to the local `outputs/` directory within the FX_Analysis repository:
+When analysis reveals a need for new or improved upstream data, document that requirement as a data request and have it implemented in the producer system, not inside FX_Analysis.
 
-- **Consolidated Matrices**: Merged return matrices
-- **Summary Statistics**: Performance metrics by model and time period
-- **Visualization Exports**: Charts, heatmaps, and analysis reports
-- **Intermediate Results**: Temporary artifacts from multi-step workflows
-
-Outputs are ephemeral and may be regenerated at any time. They are not versioned or treated as authoritative datasets. The `outputs/` directory is excluded from source control (via `.gitignore`).
-
-## Architecture Principles
-
-- **Manifest-Driven**: Dataset selection and schema information comes from the master manifest, not hard-coded paths
-- **Stateless Analytics**: Workflows can be re-run to regenerate outputs from source data
-- **Separation of Concerns**: Analytics logic is independent of data production logic
-- **Contract Compliance**: Strict adherence to the read-only contract with the data estate
+See [07-systemacro-data-architecture.md](/Users/jameshassett/dev/FX_Analysis/docs/07-systemacro-data-architecture.md), [03-read-only-contract.md](/Users/jameshassett/dev/FX_Analysis/docs/03-read-only-contract.md), and [04-data-request-contract.md](/Users/jameshassett/dev/FX_Analysis/docs/04-data-request-contract.md).
