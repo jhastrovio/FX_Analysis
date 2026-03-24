@@ -77,6 +77,8 @@ However:
 
 Analysis should rely on **structured datasets stored in OneDrive**, not on scraping the live website.
 
+For static reference inputs, a structured workbook in OneDrive is acceptable when it is stable and machine-readable. For example, portfolio allocation weights may be maintained in `_meta/Portfolio_Allocations.xlsx` and normalized in analysis code for minor presentation rounding differences.
+
 ---
 
 # OneDrive Data Store

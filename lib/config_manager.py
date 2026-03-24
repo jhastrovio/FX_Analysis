@@ -49,8 +49,15 @@ class FXAnalysisConfig:
             raise ValueError(f"OneDrive path does not exist: {self.od_root}")
         
         # Validate it's the correct OneDrive location (read-only data estate)
-        if not self.od_root.endswith('FX_Data - General'):
-            raise ValueError(f"OD should point to 'FX_Data - General', not: {self.od_root}")
+        allowed_suffixes = (
+            "FX_Data - General",
+            "FX_Data - Documents/General",
+        )
+        if not any(self.od_root.endswith(suffix) for suffix in allowed_suffixes):
+            raise ValueError(
+                "OD should point to a supported FX_Data root, not: "
+                f"{self.od_root}"
+            )
         # Note: This path is read-only. FX_Analysis never writes to this location.
     
     def _load_config(self) -> Dict[str, Any]:

@@ -34,9 +34,11 @@ storage:
 # Paths can be absolute or relative to OneDrive root (for onedrive.* entries)
 analysis_inputs:
   onedrive:
-    portfolio_allocations: "_meta/Portfolio_Allocations_JH.csv"  # Relative to OneDrive root
-    model_returns_unscaled: null  # Relative path in processed_data, or override via CLI --model-returns
-    final_positions: "auth/positions_derived/Year=2026/YM=Jan_26/positions_derived-20260122.csv"  # Relative to OneDrive root, or override via CLI --final-positions
+    portfolio_allocations: null  # Static reference workbook in _meta/Portfolio_Allocations.xlsx. Parsed externally or converted before CLI use.
+    model_positions: null  # Expanded models_signals_systemacro dataset with per-model, per-ccy positions.
+    model_returns_unscaled: null  # Legacy return-based input retained for non-attribution workflows.
+    final_positions: null  # Clean target portfolio positions, preferably from manifest dataset position_systemacro.
+    daily_portfolio_change: null  # Out of scope for the target-position strategy breakdown workflow.
 
 # File Type Definitions
 file_types:

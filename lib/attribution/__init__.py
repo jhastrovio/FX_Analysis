@@ -1,7 +1,7 @@
 """
 Attribution Analysis Module
 
-Analytics-only: Per-instrument drivers analysis for portfolio attribution.
+Analytics-only: Portfolio attribution helpers for model and strategy analysis.
 """
 
 from lib.attribution.per_instrument_drivers import (
