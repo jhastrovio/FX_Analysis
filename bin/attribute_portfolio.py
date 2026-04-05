@@ -838,8 +838,9 @@ def generate_html_report(
 <div style="background:#13161f;border:1px solid var(--border);border-radius:6px;
             padding:12px 16px;margin-bottom:14px;font-size:11.5px;
             display:flex;gap:28px;flex-wrap:wrap;">
-  <span style="color:var(--muted)">Portfolio vol (42d) <strong style="color:var(--text)">{port_vol_str}</strong></span>
-  <span style="color:var(--muted)">Diversification scalar <strong style="color:var(--green)">{port_scalar_str}</strong></span>
+  <span style="color:var(--muted)">Target vol <strong style="color:var(--text)">{TARGET_VOL:.0%}</strong></span>
+  <span style="color:var(--muted)">Pre-diversification vol <strong style="color:var(--muted)">{port_vol_str}</strong></span>
+  <span style="color:var(--muted)">Diversification scalar <strong style="color:var(--muted)">{port_scalar_str}</strong></span>
   <span style="color:var(--muted)">BU gross <strong style="color:var(--text)">${bu_gross:,}</strong></span>
   <span style="color:var(--muted)">Live gross <strong style="color:var(--text)">${live_gross:,}</strong></span>
   <span style="color:var(--muted)">Naive ratio <strong style="color:var(--text)">{naive_ratio:.3f}&times;</strong></span>
