@@ -557,7 +557,7 @@ def generate_html_report(
         pair = pair_map.get(ccy, "")
         summary_js.append(
             f'  {{ccy:{json.dumps(ccy)},pair:{json.dumps(pair)},'
-            f'usd:{int(r["bu_usd"])},sig:{r["net_units"]:.3f},'
+            f'usd:{int(r["bu_usd"])},'
             f'n:{int(r["n_models"])},top:{json.dumps(r["top_driver"])},'
             f'topPct:{r["top_pct"]:.1f}}}'
         )
@@ -806,7 +806,6 @@ def generate_html_report(
       <th class="left">Currency</th>
       <th class="left">Pair</th>
       <th>Bottom-up USD</th>
-      <th>Net signal</th>
       <th># Models</th>
       <th class="left">Top driver</th>
       <th>Driver %</th>
@@ -817,7 +816,6 @@ def generate_html_report(
 </div>
 <p style="color:var(--muted);font-size:10.5px;margin-top:8px">
   <strong style="color:var(--text)">Bottom-up USD</strong> = sum of (raw&nbsp;position&nbsp;&divide;&nbsp;100) &times; risk&nbsp;budget across all models for that currency.
-  &nbsp;&nbsp;<strong style="color:var(--text)">Net signal</strong> = vol-weighted sum (dimensionless).
   &nbsp;&nbsp;<strong style="color:var(--text)">Driver %</strong> = top model&rsquo;s share of the net directional signal.
 </p>
 
@@ -929,7 +927,6 @@ document.getElementById("summary-body").innerHTML = SUMMARY.map(s => {{
     <td class="left"><strong style="font-size:13.5px;letter-spacing:.05em">${{s.ccy}}</strong></td>
     <td class="left muted">${{s.pair}}</td>
     <td class="${{cls(s.usd)}}">${{fmtUSD(s.usd)}}</td>
-    <td class="${{cls(s.sig)}}">${{(s.sig>=0?"+":"")+s.sig.toFixed(3)}}</td>
     <td class="muted">${{s.n}}</td>
     <td class="left" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${{s.top}}</td>
     <td class="${{cls(s.usd)}}">${{s.topPct.toFixed(1)}}%</td>
