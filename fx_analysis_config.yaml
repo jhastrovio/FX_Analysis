@@ -185,6 +185,21 @@ portfolio:
     rebalance_frequency: "monthly"
     min_models: 10
     max_models: 100
+
+# Portfolio analysis constraints
+portfolio_constraints:
+  defaults:
+    aum_usd: 1000000
+    target_vol_pct: 10.0
+    max_single_ccy_exposure_pct: 15.0
+    max_aggregate_ccy_exposure_pct: 100.0
+
+  portfolios:
+    "10014":
+      aum_usd: 1000000
+      target_vol_pct: 10.0
+      max_single_ccy_exposure_pct: 100.0
+      max_aggregate_ccy_exposure_pct: 500.0
  
 
 # Model Categories and Families

@@ -35,5 +35,11 @@ dist/
 .ipynb_checkpoints/
 
 # OneDrive token cache
-*.bin outputs/*
-__pycache__/
+*.bin
+
+# Generated output artifacts
+output/
+outputs/
+
+# Claude Code worktrees
+.claude/

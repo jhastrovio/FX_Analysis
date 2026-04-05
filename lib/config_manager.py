@@ -278,6 +278,24 @@ class FXAnalysisConfig:
     def get_available_portfolio_strategies(self) -> List[str]:
         """Get list of available portfolio strategies."""
         return list(self.config['portfolio'].keys())
+
+    def get_portfolio_constraints(self, portfolio_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get portfolio analysis constraints with optional portfolio-specific overrides.
+
+        Args:
+            portfolio_id: Optional portfolio identifier
+
+        Returns:
+            Dict: Resolved constraint values
+        """
+        constraints = self.config.get('portfolio_constraints', {})
+        resolved = dict(constraints.get('defaults', {}))
+
+        if portfolio_id is not None:
+            portfolio_overrides = constraints.get('portfolios', {}).get(str(portfolio_id), {})
+            resolved.update(portfolio_overrides)
+
+        return resolved
     
     # Model classification methods
     def get_model_categories(self) -> List[str]:
