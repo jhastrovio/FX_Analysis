@@ -549,51 +549,39 @@ def generate_html_report(
         .reset_index()
         .sort_values("bu_usd", key=abs, ascending=False)
     )
-    # Map ccy → pair from CCY_TO_PAIR
+    # Map ccy → pair and sign from CCY_TO_PAIR
     pair_map = {c: p for c, (p, _) in CCY_TO_PAIR.items()}
+    sign_map_local = {c: s for c, (_, s) in CCY_TO_PAIR.items()}
+
+    # Build lookup: ccy → live_ccy_usd from recon
+    recon_lookup = {}
+    for _, rr in recon.iterrows():
+        ccy = rr["currency"]
+        actual = rr["actual_notional"]
+        sign = sign_map_local.get(ccy, 1)
+        live_ccy = int(actual * sign) if pd.notna(actual) else None
+        recon_lookup[ccy] = live_ccy
+
     summary_js = []
     for _, r in summary_rows.iterrows():
         ccy  = r["currency"]
         pair = pair_map.get(ccy, "")
+        live_ccy = recon_lookup.get(ccy)
+        live_js = str(live_ccy) if live_ccy is not None else "null"
         summary_js.append(
             f'  {{ccy:{json.dumps(ccy)},pair:{json.dumps(pair)},'
-            f'usd:{int(r["bu_usd"])},'
+            f'usd:{int(r["bu_usd"])},live:{live_js},'
             f'n:{int(r["n_models"])},top:{json.dumps(r["top_driver"])},'
             f'topPct:{r["top_pct"]:.1f}}}'
         )
 
-    # ── RECON data ────────────────────────────────────────────────────────────
-    ols_scale       = recon.attrs.get("ols_scale", float("nan"))
+    # ── RECON metadata (for diagnostic box) ─────────────────────────────────
     bu_gross        = recon.attrs.get("bu_gross", 0)
     live_gross      = recon.attrs.get("live_gross", 0)
-    naive_ratio     = recon.attrs.get("naive_ratio", float("nan"))
-    max_agg_impl    = recon.attrs.get("max_agg_implied", float("nan"))
     port_scalar     = recon.attrs.get("portfolio_scalar", float("nan"))
     port_vol        = recon.attrs.get("portfolio_vol", float("nan"))
-    ols_scale_str   = f"{ols_scale:.3f}\u00d7" if not np.isnan(ols_scale) else "n/a"
-    ols_scale_js    = str(round(ols_scale, 4)) if not np.isnan(ols_scale) else "null"
     port_scalar_str = f"{port_scalar:.2f}\u00d7" if not np.isnan(port_scalar) else "n/a"
     port_vol_str    = f"{port_vol:.2f}%" if not np.isnan(port_vol) else "n/a"
-
-    sign_map = {c: s for c, (_, s) in CCY_TO_PAIR.items()}
-    recon_js = []
-    for _, r in recon.sort_values("net_model_units", key=abs, ascending=False).iterrows():
-        ccy  = r["currency"]
-        pair = pair_map.get(ccy, "")
-        sign = sign_map.get(ccy, 1)
-        actual = r["actual_notional"]
-        live_ccy = int(actual * sign) if pd.notna(actual) else 0
-        model_bu = int(r["model_usd_bu"]) if pd.notna(r["model_usd_bu"]) else 0
-        scale    = r.get("scale_ratio")
-        fitted   = int(r["fitted_bu_usd"]) if pd.notna(r.get("fitted_bu_usd")) else 0
-        delta_f  = int(r["delta_fitted"])  if pd.notna(r.get("delta_fitted"))  else 0
-        scale_js = "null" if (scale is None or (isinstance(scale, float) and np.isnan(scale))) \
-                   else f"{scale:.3f}"
-        recon_js.append(
-            f'  {{ccy:{json.dumps(ccy)},pair:{json.dumps(pair)},'
-            f'live_ccy:{live_ccy},model:{model_bu},'
-            f'scale:{scale_js},fitted:{fitted},delta_f:{delta_f}}}'
-        )
 
     # ── DETAIL data (per-ccy, per-model) ─────────────────────────────────────
     detail_parts = []
@@ -631,7 +619,6 @@ def generate_html_report(
     # ── assemble HTML ─────────────────────────────────────────────────────────
     weights_block      = ",\n".join(weights_js)
     summary_block      = ",\n".join(summary_js)
-    recon_block        = ",\n".join(recon_js)
     detail_block       = ",\n".join(detail_parts)
     model_detail_block = ",\n".join(model_detail_js)
 
@@ -799,13 +786,23 @@ def generate_html_report(
 </p>
 
 <h2>2 &middot; Net Position Summary &nbsp;<span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10.5px">&mdash; all currencies, sorted by |bottom-up USD|</span></h2>
+<div style="background:#13161f;border:1px solid var(--border);border-radius:6px;
+            padding:12px 16px;margin-bottom:14px;font-size:11.5px;
+            display:flex;gap:28px;flex-wrap:wrap;">
+  <span style="color:var(--muted)">Target vol <strong style="color:var(--text)">{TARGET_VOL:.0%}</strong></span>
+  <span style="color:var(--muted)">Pre-div vol <strong style="color:var(--muted)">{port_vol_str}</strong></span>
+  <span style="color:var(--muted)">Div scalar <strong style="color:var(--muted)">{port_scalar_str}</strong></span>
+  <span style="color:var(--muted)">BU gross <strong style="color:var(--text)">${bu_gross:,}</strong></span>
+  <span style="color:var(--muted)">Live gross <strong style="color:var(--text)">${live_gross:,}</strong></span>
+</div>
 <div class="tbl-wrap">
 <table>
   <thead>
     <tr>
       <th class="left">Currency</th>
-      <th class="left">Pair</th>
       <th>Bottom-up USD</th>
+      <th>Live USD</th>
+      <th>&Delta;</th>
       <th># Models</th>
       <th class="left">Top driver</th>
       <th>Driver %</th>
@@ -815,7 +812,9 @@ def generate_html_report(
 </table>
 </div>
 <p style="color:var(--muted);font-size:10.5px;margin-top:8px">
-  <strong style="color:var(--text)">Bottom-up USD</strong> = sum of (raw&nbsp;position&nbsp;&divide;&nbsp;100) &times; risk&nbsp;budget across all models for that currency.
+  <strong style="color:var(--text)">Bottom-up USD</strong> = sum of (raw&nbsp;position&nbsp;&divide;&nbsp;100) &times; risk&nbsp;budget across all models.
+  Risk budgets are portfolio-level vol-targeted (diversification scalar {port_scalar_str}).
+  &nbsp;&nbsp;<strong style="color:var(--text)">Live USD</strong> = position file notional in long-CCY convention.
   &nbsp;&nbsp;<strong style="color:var(--text)">Driver %</strong> = top model&rsquo;s share of the net directional signal.
 </p>
 
@@ -830,46 +829,6 @@ def generate_html_report(
   &nbsp;&nbsp;<strong style="color:var(--red)">Red</strong> = short CCY.
 </p>
 
-<h2>5 &middot; Reconciliation
-  <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10.5px">&mdash; bottom-up vs live</span>
-</h2>
-<div style="background:#13161f;border:1px solid var(--border);border-radius:6px;
-            padding:12px 16px;margin-bottom:14px;font-size:11.5px;
-            display:flex;gap:28px;flex-wrap:wrap;">
-  <span style="color:var(--muted)">Target vol <strong style="color:var(--text)">{TARGET_VOL:.0%}</strong></span>
-  <span style="color:var(--muted)">Pre-diversification vol <strong style="color:var(--muted)">{port_vol_str}</strong></span>
-  <span style="color:var(--muted)">Diversification scalar <strong style="color:var(--muted)">{port_scalar_str}</strong></span>
-  <span style="color:var(--muted)">BU gross <strong style="color:var(--text)">${bu_gross:,}</strong></span>
-  <span style="color:var(--muted)">Live gross <strong style="color:var(--text)">${live_gross:,}</strong></span>
-  <span style="color:var(--muted)">Naive ratio <strong style="color:var(--text)">{naive_ratio:.3f}&times;</strong></span>
-  <span style="color:var(--muted)">OLS residual <strong style="color:var(--muted)">{ols_scale_str}</strong></span>
-</div>
-<div class="tbl-wrap">
-<table>
-  <thead>
-    <tr>
-      <th class="left">Currency</th>
-      <th class="left">Pair</th>
-      <th>Live USD (CCY basis)</th>
-      <th>Model bottom-up USD</th>
-      <th>&Delta;</th>
-      <th>Scale ratio</th>
-      <th>Fitted BU &times;N</th>
-      <th>&Delta; fitted</th>
-      <th>Direction</th>
-    </tr>
-  </thead>
-  <tbody id="recon-body"></tbody>
-</table>
-</div>
-<p style="color:var(--muted);font-size:10.5px;margin-top:8px">
-  <strong style="color:var(--text)">Live USD</strong>: position file notional in long-CCY convention (USD/CCY pairs sign-flipped).
-  &nbsp;&nbsp;<strong style="color:var(--text)">Model bottom-up USD</strong>: &sum;(raw&nbsp;position &divide; 100 &times; risk&nbsp;budget) across all models.
-  Risk budgets are portfolio-level vol-targeted: each model&rsquo;s isolated notional is scaled by the diversification ratio ({port_scalar_str})
-  so the aggregate portfolio vol hits {TARGET_VOL:.0%}.
-  &nbsp;&nbsp;<strong style="color:var(--text)">Scale ratio</strong>: live &divide; bottom-up per currency.
-  &nbsp;&nbsp;<strong style="color:var(--text)">&Delta; fitted</strong>: residual after applying OLS scalar.
-</p>
 
 <div class="footer">
   Generated {today} &nbsp;&middot;&nbsp; FX_Analysis / attribute_portfolio.py &nbsp;&middot;&nbsp; SYMAP_JH (10014)
@@ -883,12 +842,6 @@ const WEIGHTS = [
 const SUMMARY = [
 {summary_block}
 ];
-
-const RECON = [
-{recon_block}
-];
-
-const OLS_SCALE = {ols_scale_js};
 
 const DETAIL = {{
 {detail_block}
@@ -921,12 +874,18 @@ document.getElementById("wt-body").innerHTML = WEIGHTS.map(w => {{
   </tr>`;
 }}).join("");
 
-// 2. Summary
+// 2. Summary (merged with reconciliation)
 document.getElementById("summary-body").innerHTML = SUMMARY.map(s => {{
+  const live = s.live != null ? s.live : 0;
+  const delta = live - s.usd;
+  const absDelta = Math.abs(delta);
+  const pctOff = live !== 0 ? absDelta / Math.abs(live) * 100 : 0;
+  const deltaClass = pctOff > 50 ? "delta-warn" : "delta-ok";
   return `<tr>
     <td class="left"><strong style="font-size:13.5px;letter-spacing:.05em">${{s.ccy}}</strong></td>
-    <td class="left muted">${{s.pair}}</td>
     <td class="${{cls(s.usd)}}">${{fmtUSD(s.usd)}}</td>
+    <td class="${{cls(live)}}">${{s.live != null ? fmtUSD(live) : "\u2014"}}</td>
+    <td class="${{deltaClass}}">${{s.live != null ? fmtUSD(delta) : "\u2014"}}</td>
     <td class="muted">${{s.n}}</td>
     <td class="left" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${{s.top}}</td>
     <td class="${{cls(s.usd)}}">${{s.topPct.toFixed(1)}}%</td>
@@ -999,34 +958,6 @@ document.getElementById("model-grid").innerHTML = MODEL_DETAIL.map(m => {{
   </div>`;
 }}).join("");
 
-// 5. Reconciliation
-document.getElementById("recon-body").innerHTML = RECON.map(r => {{
-  const delta = r.model - r.live_ccy;
-  const absDelta = Math.abs(delta);
-  const pct = r.live_ccy !== 0 ? absDelta / Math.abs(r.live_ccy) * 100 : 0;
-  // Amber when delta > 200% of live (sign flip or extreme scale mismatch); muted otherwise
-  const deltaClass = pct < 200 ? "delta-ok" : "delta-warn";
-  const dirOk = (r.live_ccy > 0) === (r.model > 0);
-  // Scale ratio — amber if outlier (>8× indicates near-cancellation)
-  const scaleStr = r.scale != null ? r.scale.toFixed(3) + "\u00d7" : "\u2014";
-  const scaleColor = (r.scale != null && Math.abs(r.scale) > 8) ? "var(--amber)" : "var(--muted)";
-  // Fitted BU
-  const fittedStr = fmtUSD(r.fitted);
-  // Delta fitted — amber when residual > $100k
-  const deltaFStr = r.delta_f >= 0 ? "+" + fmtUSD(r.delta_f).replace("+","") : fmtUSD(r.delta_f);
-  const deltaFColor = Math.abs(r.delta_f) > 100000 ? "var(--amber)" : "var(--muted)";
-  return `<tr>
-    <td class="left"><strong>${{r.ccy}}</strong></td>
-    <td class="left muted">${{r.pair}}</td>
-    <td class="${{cls(r.live_ccy)}}">${{fmtUSD(r.live_ccy)}}</td>
-    <td class="${{cls(r.model)}}">${{fmtUSD(r.model)}}</td>
-    <td class="${{deltaClass}}">${{delta >= 0 ? "+" : ""}}${{fmtUSD(delta).replace("+","").replace("-","")}}</td>
-    <td style="text-align:right;color:${{scaleColor}};font-size:11px">${{scaleStr}}</td>
-    <td class="${{cls(r.fitted)}}">${{fittedStr}}</td>
-    <td style="text-align:right;color:${{deltaFColor}};font-size:11px">${{deltaFStr}}</td>
-    <td style="text-align:center;font-weight:700;color:${{dirOk?'var(--green)':'var(--red)'}}">${{dirOk ? "✓" : "✗"}}</td>
-  </tr>`;
-}}).join("");
 </script>
 </body>
 </html>"""
