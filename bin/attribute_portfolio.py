@@ -938,7 +938,7 @@ document.getElementById("model-grid").innerHTML = MODEL_DETAIL.map(m => {{
       <div class="bar-track" style="flex:1">
         <div class="bar-fill" style="width:${{Math.min(w,100)}}%;background:${{col}}"></div>
       </div>
-      <span class="bar-pct ${{pos>=0?'pos':'neg'}}" style="width:60px;min-width:60px">${{pos>=0?"+":""+pos.toFixed(1)}}</span>
+      <span class="bar-pct ${{pos>=0?'pos':'neg'}}" style="width:60px;min-width:60px">${{pos>=0?"+"+pos.toFixed(1):pos.toFixed(1)}}</span>
     </div>`;
   }}).join("");
   return `<div class="card">
