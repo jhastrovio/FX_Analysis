@@ -198,8 +198,37 @@ portfolio_constraints:
     "10014":
       aum_usd: 1000000
       target_vol_pct: 10.0
-      max_single_ccy_exposure_pct: 100.0
       max_aggregate_ccy_exposure_pct: 500.0
+      currency_tiers:
+        tier1:
+          max_single_ccy_exposure_pct: 100.0
+          currencies:
+            - AUD
+            - BRL
+            - CAD
+            - CHF
+            - CNH
+            - EUR
+            - GBP
+            - JPY
+            - KRW
+            - MXN
+            - NOK
+            - NZD
+            - SEK
+            - SGD
+            - USD
+        tier2:
+          max_single_ccy_exposure_pct: 60.0
+          currencies:
+            - CLP
+            - HUF
+            - IDR
+            - INR
+            - PHP
+            - PLN
+            - TWD
+            - ZAR
  
 
 # Model Categories and Families
