@@ -3,25 +3,28 @@
 Attribution for SYMAP_JH portfolio (10014).
 
 For a given date, attributes each currency's net modelled position
-to the underlying strategies by weighting each model's unscaled
-currency position by its vol-adjusted portfolio weight.
+to the underlying strategies using Thomas's unconstrained position formula:
 
-Portfolio construction (portfolio-level vol targeting):
-  - Each model's risk allocation (risk_alloc) defines its share of the
-    total 10% portfolio vol target.
-  - The vol-targeting formula sizes each model in isolation, then scales
-    all notionals by the diversification ratio so that the PORTFOLIO-LEVEL
-    vol (accounting for cross-model correlations) hits the 10% target.
-  - Isolated notional = AUM × target_vol × (risk_alloc / Σrisk_alloc) / vol_42d_decimal
-  - Diversification ratio = Σ(w_i × σ_i) / σ_portfolio
-    where σ_portfolio comes from the full covariance matrix of model returns
-  - Final dollar_notl = isolated_notional × diversification_ratio
+    scaled_pos_i_c = (sig_i_c / 100) * (TARGET_VOL / vol_42d_i) * sqrt(risk_alloc_i)
+
+where:
+  - sig_i_c     = raw signal for model i, currency c (–100 to +100 scale)
+  - TARGET_VOL  = 0.10 (10% annualised vol target, decimal)
+  - vol_42d_i   = 42-day trailing annualised vol for model i (decimal)
+  - risk_alloc_i = risk budget for model i (from Portfolio_Allocations.xlsx)
+
+Per-currency net position = sum of scaled_pos across all models.
+USD contribution per model = scaled_pos × AUM (unconstrained; no caps applied).
+
+Constraints (per-currency caps, aggregate gross cap, fundvolfactor) are
+layered on in step 2 and are NOT applied here.
 
 Usage:
     python bin/attribute_portfolio.py [--date YYYY-MM-DD]
 """
 import argparse
 from pathlib import Path
+import warnings
 import numpy as np
 import pandas as pd
 
@@ -88,6 +91,12 @@ CCY_TO_PAIR = {
     "TWD": ("USDTWD",  -1), "TRY": ("USDTRY",  -1),
     "USD": ("USD_NET", +1),   # implied net USD from portfolio pair legs
 }
+
+# CCY/USD pairs where the position file stores notional in native CCY (not USD).
+# e.g. NZDUSD notional is in NZD, GBPUSD notional is in GBP.
+CCY_USD_PAIRS = frozenset(
+    pair for _, (pair, _) in CCY_TO_PAIR.items() if pair.endswith("USD") and pair != "USD_NET"
+)
 
 
 # ── data loading ──────────────────────────────────────────────────────────────
@@ -280,25 +289,79 @@ def load_portfolio_positions(target_date: pd.Timestamp) -> pd.Series:
     return pd.Series(positions)
 
 
+def load_spot_rates(pairs: list, target_date: pd.Timestamp) -> dict:
+    """Load closing spot rate (mid) for each pair from historical hourly data.
+
+    Data lives at:
+        OD/auth/hist_hourly/symbol={PAIR}/hist_hourly_{PAIR}_{YYYY-MM}.csv
+
+    Columns: symbol, ts_utc, provider, mid, run_id
+    Returns {pair: float} for pairs with available data; omits pairs where
+    data is missing (caller handles the fallback).
+    """
+    fx_dir = OD / "auth/hist_hourly"
+    rates: dict = {}
+
+    for pair in pairs:
+        ym = target_date.strftime("%Y-%m")
+        csv_path = fx_dir / f"symbol={pair}" / f"hist_hourly_{pair}_{ym}.csv"
+
+        # If current-month file is missing or has no rows before target,
+        # fall back to the previous month's file.
+        candidate_paths = [csv_path]
+        prev_ym = (target_date - pd.DateOffset(months=1)).strftime("%Y-%m")
+        candidate_paths.append(
+            fx_dir / f"symbol={pair}" / f"hist_hourly_{pair}_{prev_ym}.csv"
+        )
+
+        dfs = []
+        for path in candidate_paths:
+            if not path.exists():
+                continue
+            try:
+                df = pd.read_csv(path, usecols=["ts_utc", "mid"])
+                df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
+                dfs.append(df)
+            except Exception as exc:
+                warnings.warn(f"FX rate load error for {pair} ({path.name}): {exc}")
+
+        if not dfs:
+            warnings.warn(
+                f"No FX rate data found for {pair}; "
+                "live_usd will use actual_notional as-is (units mismatch)."
+            )
+            continue
+
+        combined = pd.concat(dfs, ignore_index=True)
+        # End-of-day cutoff in UTC: take the last hourly bar on or before target_date
+        cutoff = pd.Timestamp(target_date.date()).tz_localize("UTC") + pd.Timedelta(hours=23, minutes=59)
+        before = combined[combined["ts_utc"] <= cutoff]
+
+        if before.empty:
+            warnings.warn(
+                f"No FX data for {pair} on or before {target_date.date()}; "
+                "live_usd will use actual_notional as-is (units mismatch)."
+            )
+            continue
+
+        rates[pair] = float(before.loc[before["ts_utc"].idxmax(), "mid"])
+
+    return rates
+
+
 # ── attribution ───────────────────────────────────────────────────────────────
 
 def build_position_matrix(
-    alloc: pd.DataFrame, target_date: pd.Timestamp, portfolio_scalar: float = 1.0,
+    alloc: pd.DataFrame, target_date: pd.Timestamp,
 ) -> pd.DataFrame:
-    """One row per model with positions, vol, and weights.
+    """One row per model with positions, vol, and per-model sizing factors.
 
-    Vol-adjusted weights (step 1 — relative sizing):
-        raw_weight    = risk_alloc / vol_42d
-        vol_weight    = raw_weight / Σ(raw_weights)
+    Per-model columns for the Thomas attribution formula:
+        volfactor = (TARGET_VOL * 100) / vol_42d   (vol ratio; TARGET_VOL decimal, vol_42d pct-pts)
+        sqrt_rb   = sqrt(risk_alloc)               (square-root of risk budget)
 
-    Dollar notional (step 2 — portfolio-level vol targeting):
-        dollar_notl = AUM × vol_weight × portfolio_scalar
-
-    The portfolio_scalar = TARGET_VOL_PCT / portfolio_vol_PCT, where
-    portfolio_vol is measured from the vol-weight-weighted return series.
-    This accounts for diversification: because the models are weakly
-    correlated, the risk-weighted portfolio runs below target vol.
-    Scaling up ensures the aggregate hits the 10% target.
+    These feed directly into compute_attribution():
+        scaled_pos = (sig / 100) * volfactor * sqrt_rb
     """
     rows, missing, no_vol = [], [], []
 
@@ -326,23 +389,28 @@ def build_position_matrix(
     if missing:
         print(f"  [warn] No signal data for model(s): {missing}")
     if no_vol:
-        print(f"  [warn] No vol computed for model(s): {no_vol} — excluded from weights")
+        print(f"  [warn] No vol computed for model(s): {no_vol} — excluded from attribution")
 
     df = pd.DataFrame(rows)
-    df["raw_weight"] = df["risk_alloc"] / df["vol_42d"]
-    total_raw = df["raw_weight"].sum()
-    df["vol_weight"] = df["raw_weight"] / total_raw
-    df["dollar_notl"] = AUM * df["vol_weight"] * portfolio_scalar
+    df["volfactor"] = (TARGET_VOL * 100) / df["vol_42d"]   # NaN where vol is missing; vol_42d in pct-pts
+    df["sqrt_rb"]   = df["risk_alloc"] ** 0.5
     return df
 
 
 def compute_attribution(pos_matrix: pd.DataFrame) -> pd.DataFrame:
     """Long-format attribution table, one row per (currency, model).
 
+    Uses Thomas's unconstrained position formula:
+        scaled_pos = (sig / 100) * volfactor * sqrt_rb
+
+    where volfactor = TARGET_VOL / vol_42d  and  sqrt_rb = sqrt(risk_alloc).
+    Models with missing vol (volfactor = NaN) are excluded.
+
     Columns:
-      weighted_pos  — raw_position × vol_weight  (dimensionless signal share)
-      pct_of_net    — share of net modelled position (%)
-      usd_contrib   — bottom-up USD: (raw_position / 100) × dollar_notl
+      scaled_pos     — Thomas formula output (dimensionless)
+      net_scaled_pos — sum of scaled_pos across all models for this currency
+      pct_of_net     — scaled_pos / net_scaled_pos × 100
+      usd_contrib    — scaled_pos × AUM (unconstrained USD, no caps applied)
     """
     rows = []
     for ccy in CCY_COLS:
@@ -352,17 +420,19 @@ def compute_attribution(pos_matrix: pd.DataFrame) -> pd.DataFrame:
             raw_pos = m[ccy]
             if raw_pos == 0 or pd.isna(raw_pos):
                 continue
+            if pd.isna(m["volfactor"]):   # model excluded due to missing vol
+                continue
+            scaled_pos = (raw_pos / 100.0) * m["volfactor"] * m["sqrt_rb"]
             rows.append({
                 "currency":      ccy,
                 "model_id":      int(m["model_id"]),
                 "strategy_name": m["strategy_name"],
                 "category":      m["category"],
                 "risk_alloc":    m["risk_alloc"],
-                "vol_42d":       round(m["vol_42d"], 2),
-                "vol_weight":    round(m["vol_weight"], 4),
-                "dollar_notl":   round(m["dollar_notl"]),
+                "vol_42d":       m["vol_42d"],
+                "volfactor":     round(m["volfactor"], 4),
                 "raw_position":  raw_pos,
-                "weighted_pos":  raw_pos * m["vol_weight"],
+                "scaled_pos":    scaled_pos,
             })
 
     if not rows:
@@ -370,61 +440,33 @@ def compute_attribution(pos_matrix: pd.DataFrame) -> pd.DataFrame:
 
     attr = pd.DataFrame(rows)
 
-    # Net weighted position and pct attribution
-    net = attr.groupby("currency")["weighted_pos"].sum().rename("net_weighted_pos")
+    net = attr.groupby("currency")["scaled_pos"].sum().rename("net_scaled_pos")
     attr = attr.join(net, on="currency")
-    attr["pct_of_net"] = (attr["weighted_pos"] / attr["net_weighted_pos"] * 100).round(1)
-
-    # Bottom-up USD: raw position as a fraction of notional scale (0–100) × model risk budget
-    attr["usd_contrib"] = attr["raw_position"] / 100.0 * attr["dollar_notl"]
-
-    # ── apply per-currency position limits ────────────────────────────────
-    # Tier 1 currencies: max 100% AUM per CCY; Tier 2: max 60% AUM per CCY.
-    # If the uncapped net |usd_contrib| for a currency exceeds its limit,
-    # scale all model contributions for that currency proportionally.
-    max_t1 = MAX_SINGLE_T1 / 100.0 * AUM   # $1,000,000
-    max_t2 = MAX_SINGLE_T2 / 100.0 * AUM   # $600,000
-
-    net_usd_per_ccy = attr.groupby("currency")["usd_contrib"].sum()
-    ccy_scale = {}
-    for ccy, net_usd in net_usd_per_ccy.items():
-        cap = max_t1 if ccy in TIER1_CCYS else max_t2 if ccy in TIER2_CCYS else max_t1
-        if abs(net_usd) > cap:
-            ccy_scale[ccy] = cap / abs(net_usd)
-
-    if ccy_scale:
-        attr["ccy_cap_scale"] = attr["currency"].map(lambda c: ccy_scale.get(c, 1.0))
-        attr["usd_contrib"] = attr["usd_contrib"] * attr["ccy_cap_scale"]
-        attr.drop(columns=["ccy_cap_scale"], inplace=True)
-
-    # ── apply aggregate gross limit (500% AUM) ───────────────────────────
-    # If the sum of |net per-ccy usd| exceeds the 500% cap, scale everything
-    # down proportionally.
-    net_usd_after_ccy = attr.groupby("currency")["usd_contrib"].sum()
-    agg_gross = net_usd_after_ccy.abs().sum()
-    agg_cap = MAX_AGG_PCT / 100.0 * AUM   # $5,000,000
-    if agg_gross > agg_cap:
-        agg_scale = agg_cap / agg_gross
-        attr["usd_contrib"] = attr["usd_contrib"] * agg_scale
-
-    attr["usd_contrib"] = attr["usd_contrib"].round()
+    attr["pct_of_net"]  = (attr["scaled_pos"] / attr["net_scaled_pos"] * 100).round(1)
+    attr["usd_contrib"] = (attr["scaled_pos"] * AUM).round()
 
     return attr.sort_values(["currency", "pct_of_net"], ascending=[True, False]).reset_index(drop=True)
 
 
 # ── reconciliation ────────────────────────────────────────────────────────────
 
-def reconcile(attr: pd.DataFrame, port_pos: pd.Series) -> pd.DataFrame:
-    """Per-currency reconciliation: bottom-up model USD vs live portfolio notional."""
+def reconcile(attr: pd.DataFrame, port_pos: pd.Series, fx_rates: "dict | None" = None) -> pd.DataFrame:
+    """Per-currency reconciliation: bottom-up model USD vs live portfolio notional.
+
+    fx_rates: {pair: spot_rate} for CCY/USD pairs (NZDUSD, AUDUSD, GBPUSD, EURUSD).
+    These pairs store notionals in the base (native) currency in the position file,
+    so we multiply by the spot rate to convert to USD before comparing with model_usd_bu.
+    If fx_rates is None or a pair is missing, falls back to raw notional (with a warning).
+    """
     net_by_ccy = (
-        attr.groupby("currency")["net_weighted_pos"]
+        attr.groupby("currency")["net_scaled_pos"]
         .first()
         .reset_index()
     )
     rows = []
     for _, r in net_by_ccy.iterrows():
         ccy = r["currency"]
-        net_units = r["net_weighted_pos"]
+        net_units = r["net_scaled_pos"]
         pair_info = CCY_TO_PAIR.get(ccy)
         pair, sign_mult = pair_info if pair_info else (None, None)
         actual = port_pos.get(pair) if pair else None
@@ -436,7 +478,7 @@ def reconcile(attr: pd.DataFrame, port_pos: pd.Series) -> pd.DataFrame:
         else:
             signs_match, implied_scale = None, None
 
-        # Bottom-up USD: sum of (raw_position / 100) × dollar_notl for this currency
+        # Bottom-up USD: sum of scaled_pos × AUM for this currency
         net_usd = attr.loc[attr["currency"] == ccy, "usd_contrib"].sum()
 
         rows.append({
@@ -451,11 +493,34 @@ def reconcile(attr: pd.DataFrame, port_pos: pd.Series) -> pd.DataFrame:
 
     recon = pd.DataFrame(rows)
 
-    # ── live_ccy_usd: actual notional in long-CCY convention ──────────────────
+    # ── live_usd: actual notional converted to USD ────────────────────────────
+    # For CCY/USD pairs (NZDUSD, AUDUSD, GBPUSD, EURUSD) the position file stores
+    # notionals in the native base currency (NZD, AUD, GBP, EUR).  Multiply by the
+    # spot rate to get USD.  For USD/CCY pairs the notional is already in USD.
+    _fx = fx_rates or {}
     sign_map_local = {c: s for c, (_, s) in CCY_TO_PAIR.items()}
-    recon["live_ccy_usd"] = recon.apply(
-        lambda row: int(row["actual_notional"] * sign_map_local.get(row["currency"], 1))
+
+    def _notional_to_usd(notional, pair):
+        if pair in CCY_USD_PAIRS:
+            rate = _fx.get(pair)
+            if rate is not None:
+                return notional * rate
+            warnings.warn(
+                f"No spot rate for {pair}; live_usd uses native-CCY notional "
+                "(units mismatch vs model_usd_bu)."
+            )
+        return notional
+
+    recon["live_usd"] = recon.apply(
+        lambda row: int(_notional_to_usd(row["actual_notional"], row["pair"]))
         if pd.notna(row["actual_notional"]) else None,
+        axis=1,
+    )
+
+    # ── live_ccy_usd: live_usd in long-CCY convention ─────────────────────────
+    recon["live_ccy_usd"] = recon.apply(
+        lambda row: int(row["live_usd"] * sign_map_local.get(row["currency"], 1))
+        if pd.notna(row["live_usd"]) else None,
         axis=1,
     )
 
@@ -523,16 +588,17 @@ def generate_html_report(
     n_ccys   = attr["currency"].nunique()
 
     # ── WEIGHTS data ─────────────────────────────────────────────────────────
-    wt_sorted = pos_matrix.sort_values("vol_weight", ascending=False)
+    wt_sorted = pos_matrix.sort_values("risk_alloc", ascending=False)
     weights_js = []
     for _, r in wt_sorted.iterrows():
-        rb = int(round(r["dollar_notl"])) if r["dollar_notl"] == r["dollar_notl"] else 0
+        rb = int(round(r["risk_alloc"] * AUM))
+        vf = r["volfactor"] if r["volfactor"] == r["volfactor"] else float("nan")
         weights_js.append(
             f'  {{id:{int(r["model_id"])},name:{json.dumps(r["strategy_name"])},'
             f'cat:{json.dumps(_cat_slug(r["category"]))},'
-            f'alloc:{r["risk_alloc"]:.2f},'
-            f'vol:{r["vol_42d"]:.2f},'
-            f'wt:{r["vol_weight"]:.4f},'
+            f'alloc:{r["risk_alloc"]:.4f},'
+            f'vol:{r["vol_42d"]:.4f},'
+            f'wt:{vf:.4f},'
             f'rb:{rb}}}'
         )
 
@@ -540,27 +606,20 @@ def generate_html_report(
     summary_rows = (
         attr.groupby("currency")
         .agg(
-            net_units  =("net_weighted_pos", "first"),
-            bu_usd     =("usd_contrib",      "sum"),
-            n_models   =("model_id",         "count"),
-            top_driver =("strategy_name",    "first"),
-            top_pct    =("pct_of_net",       "first"),
+            net_units  =("net_scaled_pos", "first"),
+            bu_usd     =("usd_contrib",    "sum"),
+            n_models   =("model_id",       "count"),
+            top_driver =("strategy_name",  "first"),
+            top_pct    =("pct_of_net",     "first"),
         )
         .reset_index()
         .sort_values("bu_usd", key=abs, ascending=False)
     )
-    # Map ccy → pair and sign from CCY_TO_PAIR
+    # Map ccy → pair from CCY_TO_PAIR
     pair_map = {c: p for c, (p, _) in CCY_TO_PAIR.items()}
-    sign_map_local = {c: s for c, (_, s) in CCY_TO_PAIR.items()}
 
-    # Build lookup: ccy → live_ccy_usd from recon
-    recon_lookup = {}
-    for _, rr in recon.iterrows():
-        ccy = rr["currency"]
-        actual = rr["actual_notional"]
-        sign = sign_map_local.get(ccy, 1)
-        live_ccy = int(actual * sign) if pd.notna(actual) else None
-        recon_lookup[ccy] = live_ccy
+    # Build lookup: ccy → live_ccy_usd from recon (already FX-converted and sign-adjusted)
+    recon_lookup = recon.set_index("currency")["live_ccy_usd"].to_dict()
 
     summary_js = []
     for _, r in summary_rows.iterrows():
@@ -576,12 +635,8 @@ def generate_html_report(
         )
 
     # ── RECON metadata (for diagnostic box) ─────────────────────────────────
-    bu_gross        = recon.attrs.get("bu_gross", 0)
-    live_gross      = recon.attrs.get("live_gross", 0)
-    port_scalar     = recon.attrs.get("portfolio_scalar", float("nan"))
-    port_vol        = recon.attrs.get("portfolio_vol", float("nan"))
-    port_scalar_str = f"{port_scalar:.2f}\u00d7" if not np.isnan(port_scalar) else "n/a"
-    port_vol_str    = f"{port_vol:.2f}%" if not np.isnan(port_vol) else "n/a"
+    bu_gross   = recon.attrs.get("bu_gross", 0)
+    live_gross = recon.attrs.get("live_gross", 0)
 
     # ── DETAIL data (per-ccy, per-model) ─────────────────────────────────────
     detail_parts = []
@@ -600,7 +655,8 @@ def generate_html_report(
     model_detail_js = []
     for _, m in wt_sorted.iterrows():
         mid = int(m["model_id"])
-        rb  = int(round(m["dollar_notl"])) if m["dollar_notl"] == m["dollar_notl"] else 0
+        rb  = int(round(m["risk_alloc"] * AUM))
+        vf  = m["volfactor"] if m["volfactor"] == m["volfactor"] else 0.0
         # Collect non-zero CCY positions, sorted by |raw_pos| desc
         ccy_rows = []
         for ccy in CCY_COLS:
@@ -612,7 +668,7 @@ def generate_html_report(
         model_detail_js.append(
             f'  {{id:{mid},name:{json.dumps(m["strategy_name"])},'
             f'cat:{json.dumps(_cat_slug(m["category"]))},'
-            f'wt:{m["vol_weight"]*100:.2f},rb:{rb},'
+            f'wt:{vf:.4f},rb:{rb},'
             f'ccys:[{ccys_js}]}}'
         )
 
@@ -762,7 +818,7 @@ def generate_html_report(
   </div>
 </div>
 
-<h2>1 &middot; Model Weights &nbsp;<span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10.5px">&mdash; vol-adjusted, sorted by portfolio weight</span></h2>
+<h2>1 &middot; Model Sizing Factors &nbsp;<span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10.5px">&mdash; unconstrained, sorted by risk allocation</span></h2>
 <div class="tbl-wrap">
 <table>
   <thead>
@@ -771,18 +827,19 @@ def generate_html_report(
       <th class="left">Category</th>
       <th>Risk alloc</th>
       <th>42d vol</th>
-      <th>Portfolio weight</th>
-      <th>Risk budget</th>
-      <th class="left" style="padding-left:20px">Weight</th>
+      <th>Vol factor</th>
+      <th>Risk budget (USD)</th>
+      <th class="left" style="padding-left:20px">Vol factor</th>
     </tr>
   </thead>
   <tbody id="wt-body"></tbody>
 </table>
 </div>
 <p style="color:var(--muted);font-size:10.5px;margin-top:8px">
-  <strong style="color:var(--text)">Risk budget</strong> = dollars allocated to this model after vol-risk targeting
-  (AUM &times; {TARGET_VOL:.0%} &times; risk_alloc_share &divide; 42d&nbsp;vol).
-  A higher-vol model gets a smaller dollar allocation for the same risk budget.
+  <strong style="color:var(--text)">Vol factor</strong> = TARGET_VOL &divide; vol_42d &mdash; the leverage applied to the raw signal.
+  A lower-vol model gets a higher vol factor and therefore a larger scaled position.
+  &nbsp;&nbsp;<strong style="color:var(--text)">Risk budget (USD)</strong> = risk_alloc &times; AUM.
+  &nbsp;&nbsp;Scaled position = (signal&nbsp;&divide;&nbsp;100) &times; vol_factor &times; &radic;risk_alloc (unconstrained).
 </p>
 
 <h2>2 &middot; Net Position Summary &nbsp;<span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10.5px">&mdash; all currencies, sorted by |bottom-up USD|</span></h2>
@@ -790,9 +847,7 @@ def generate_html_report(
             padding:12px 16px;margin-bottom:14px;font-size:11.5px;
             display:flex;gap:28px;flex-wrap:wrap;">
   <span style="color:var(--muted)">Target vol <strong style="color:var(--text)">{TARGET_VOL:.0%}</strong></span>
-  <span style="color:var(--muted)">Pre-div vol <strong style="color:var(--muted)">{port_vol_str}</strong></span>
-  <span style="color:var(--muted)">Div scalar <strong style="color:var(--muted)">{port_scalar_str}</strong></span>
-  <span style="color:var(--muted)">BU gross <strong style="color:var(--text)">${bu_gross:,}</strong></span>
+  <span style="color:var(--muted)">BU gross (unconstrained) <strong style="color:var(--text)">${bu_gross:,}</strong></span>
   <span style="color:var(--muted)">Live gross <strong style="color:var(--text)">${live_gross:,}</strong></span>
 </div>
 <div class="tbl-wrap">
@@ -812,9 +867,10 @@ def generate_html_report(
 </table>
 </div>
 <p style="color:var(--muted);font-size:10.5px;margin-top:8px">
-  <strong style="color:var(--text)">Bottom-up USD</strong> = sum of (raw&nbsp;position&nbsp;&divide;&nbsp;100) &times; risk&nbsp;budget across all models.
-  Risk budgets are portfolio-level vol-targeted (diversification scalar {port_scalar_str}).
-  &nbsp;&nbsp;<strong style="color:var(--text)">Live USD</strong> = position file notional in long-CCY convention.
+  <strong style="color:var(--text)">Bottom-up USD</strong> = sum of scaled_pos &times; AUM across all models (unconstrained; no caps applied).
+  scaled_pos = (signal&nbsp;&divide;&nbsp;100) &times; vol_factor &times; &radic;risk_alloc.
+  &nbsp;&nbsp;<strong style="color:var(--text)">Live USD</strong> = position file notional converted to USD in long-CCY convention.
+  CCY/USD pairs (NZD, AUD, GBP, EUR) are FX-converted using the closing spot rate.
   &nbsp;&nbsp;<strong style="color:var(--text)">Driver %</strong> = top model&rsquo;s share of the net directional signal.
 </p>
 
@@ -866,11 +922,11 @@ document.getElementById("wt-body").innerHTML = WEIGHTS.map(w => {{
   return `<tr>
     <td class="left" style="font-weight:500">${{w.name}} <span class="muted" style="font-size:10px">#${{w.id}}</span></td>
     <td class="left"><span class="tag tag-${{w.cat}}">${{w.cat.replace(/-/g," ")}}</span></td>
-    <td>${{(w.alloc*100).toFixed(0)}}%</td>
-    <td>${{w.vol.toFixed(2)}}%</td>
-    <td>${{(w.wt*100).toFixed(2)}}%</td>
+    <td>${{(w.alloc*100).toFixed(2)}}%</td>
+    <td>${{(w.vol*100).toFixed(2)}}%</td>
+    <td>${{isFinite(w.wt) ? w.wt.toFixed(3) : "n/a"}}</td>
     <td>$${{w.rb.toLocaleString()}}</td>
-    <td class="left" style="padding-left:20px"><span class="spark" style="width:${{bw}}px"></span></td>
+    <td class="left" style="padding-left:20px"><span class="spark" style="width:${{isFinite(w.wt) ? bw : 0}}px"></span></td>
   </tr>`;
 }}).join("");
 
@@ -950,7 +1006,7 @@ document.getElementById("model-grid").innerHTML = MODEL_DETAIL.map(m => {{
       <span class="tag tag-${{m.cat}}">${{m.cat.replace(/-/g," ")}}</span>
     </div>
     <div style="display:flex;gap:16px;margin-bottom:10px;font-size:10.5px;color:var(--muted)">
-      <span>Weight <strong style="color:var(--text)">${{m.wt.toFixed(2)}}%</strong></span>
+      <span>Vol factor <strong style="color:var(--text)">${{isFinite(m.wt) ? m.wt.toFixed(3) : "n/a"}}</strong></span>
       <span>Risk budget <strong style="color:var(--text)">$${{m.rb.toLocaleString()}}</strong></span>
       <span>${{m.ccys.length}} CCY${{m.ccys.length>1?"s":""}}</span>
     </div>
@@ -974,20 +1030,21 @@ def run(target_date: pd.Timestamp) -> None:
     alloc = load_allocations()
     print(f"  {len(alloc)} models in allocations")
 
-    print(f"  Computing portfolio-level vol scalar...")
-    portfolio_scalar, portfolio_vol = compute_portfolio_scalar(alloc, target_date)
-    print(f"  Portfolio vol (42d): {portfolio_vol:.2f}%  |  "
-          f"Scalar: {portfolio_scalar:.3f}x  "
-          f"(diversification uplift to hit {TARGET_VOL:.0%} target)")
-
     print(f"  Loading signal files for {target_date.date()}...")
-    pos_matrix = build_position_matrix(alloc, target_date, portfolio_scalar)
+    pos_matrix = build_position_matrix(alloc, target_date)
     n_valid = pos_matrix["vol_42d"].notna().sum()
     print(f"  {len(pos_matrix)} / {len(alloc)} models loaded  |  "
           f"{n_valid} with valid vol\n")
 
     port_pos = load_portfolio_positions(target_date)
     attr = compute_attribution(pos_matrix)
+
+    fx_rates = load_spot_rates(sorted(CCY_USD_PAIRS), target_date)
+    if fx_rates:
+        loaded = ", ".join(f"{p}={v:.5f}" for p, v in sorted(fx_rates.items()))
+        print(f"  FX spot rates: {loaded}")
+    else:
+        print("  [warn] No FX spot rates loaded; CCY/USD notionals will not be converted.")
 
     # ── save outputs ──────────────────────────────────────────────────────────
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -998,13 +1055,11 @@ def run(target_date: pd.Timestamp) -> None:
     wt_path    = OUTPUT_DIR / f"model_weights_10014_{date_str}.csv"
 
     attr.to_csv(attr_path, index=False)
-    recon = reconcile(attr, port_pos)
-    recon.attrs["portfolio_scalar"] = round(portfolio_scalar, 4)
-    recon.attrs["portfolio_vol"]    = round(portfolio_vol, 2)
+    recon = reconcile(attr, port_pos, fx_rates)
     recon.to_csv(recon_path, index=False)
 
     wt_out = pos_matrix[["model_id", "strategy_name", "category",
-                          "risk_alloc", "vol_42d", "vol_weight", "dollar_notl"]].copy()
+                          "risk_alloc", "vol_42d", "volfactor", "sqrt_rb"]].copy()
     wt_out.to_csv(wt_path, index=False)
 
     html_path = OUTPUT_DIR / f"attribution_report_10014_{date_str}.html"
@@ -1020,22 +1075,21 @@ def run(target_date: pd.Timestamp) -> None:
 
     # ── weight table ──────────────────────────────────────────────────────────
     wt_display = wt_out.copy()
-    wt_display["vol_42d"]    = wt_display["vol_42d"].map(lambda x: f"{x:.2f}%")
-    wt_display["vol_weight"] = wt_display["vol_weight"].map(lambda x: f"{x:.3f}")
-    wt_display["dollar_notl"] = wt_display["dollar_notl"].map(
-        lambda x: f"${x:,.0f}" if x == x else "n/a")
-    print("── Model weights (vol-adjusted, target vol 10%) ──")
+    wt_display["vol_42d"]   = wt_display["vol_42d"].map(lambda x: f"{x:.4f}" if x == x else "n/a")
+    wt_display["volfactor"] = wt_display["volfactor"].map(lambda x: f"{x:.3f}" if x == x else "n/a")
+    wt_display["sqrt_rb"]   = wt_display["sqrt_rb"].map(lambda x: f"{x:.4f}")
+    print("── Model sizing factors (unconstrained, target vol 10%) ──")
     print(wt_display.to_string(index=False))
 
     # ── net position summary ──────────────────────────────────────────────────
     net_summary = (
         attr.groupby("currency")
         .agg(
-            net_units  =("net_weighted_pos", "first"),
-            bu_usd     =("usd_contrib",      "sum"),
-            n_models   =("model_id",         "count"),
-            top_driver =("strategy_name",    "first"),
-            top_pct    =("pct_of_net",       "first"),
+            net_units  =("net_scaled_pos", "first"),
+            bu_usd     =("usd_contrib",    "sum"),
+            n_models   =("model_id",       "count"),
+            top_driver =("strategy_name",  "first"),
+            top_pct    =("pct_of_net",     "first"),
         )
         .reset_index()
         .sort_values("net_units", key=abs, ascending=False)
@@ -1047,7 +1101,7 @@ def run(target_date: pd.Timestamp) -> None:
 
     # ── per-currency driver detail (top 8 by abs net units) ──────────────────
     top_ccys = (
-        attr.groupby("currency")["net_weighted_pos"]
+        attr.groupby("currency")["net_scaled_pos"]
         .first()
         .abs()
         .nlargest(8)
@@ -1056,12 +1110,12 @@ def run(target_date: pd.Timestamp) -> None:
     for ccy in top_ccys:
         sub = attr[attr["currency"] == ccy][
             ["strategy_name", "category", "raw_position",
-             "weighted_pos", "pct_of_net", "usd_contrib"]
+             "scaled_pos", "pct_of_net", "usd_contrib"]
         ].copy()
-        net_u   = attr.loc[attr["currency"] == ccy, "net_weighted_pos"].iloc[0]
+        net_u   = attr.loc[attr["currency"] == ccy, "net_scaled_pos"].iloc[0]
         net_usd = sub["usd_contrib"].sum()
         sub["usd_contrib"] = sub["usd_contrib"].map(lambda x: f"${x:,.0f}")
-        print(f"\n── {ccy}  net: {net_u:+.3f} units  |  bu_usd: ${net_usd:,.0f} ──")
+        print(f"\n── {ccy}  net: {net_u:+.4f} scaled  |  usd_unconstrained: ${net_usd:,.0f} ──")
         print(sub.to_string(index=False))
 
     # ── reconciliation summary ────────────────────────────────────────────────
